@@ -1,6 +1,8 @@
 import net from "node:net";
+import os from "node:os";
 import { prisma } from "./db.ts";
 import { formatMoney } from "./currency.ts";
+import { sendWindowsRaw } from "./windows-print.ts";
 
 export const SLIP_WIDTH_80MM = 42;
 export const SLIP_WIDTH_58MM = 32;
@@ -50,6 +52,17 @@ function lineItem(name: string, qty: number, price: number, width: number) {
   const last = nameLines.pop() || "";
   const aligned = last + " ".repeat(Math.max(1, width - last.length - right.length)) + right;
   return [...nameLines, aligned].join("\n");
+}
+
+export function combineSlipItems<T extends { qty: number; name: string; price: number; notes?: string }>(items: T[]) {
+  const grouped = new Map<string, T>();
+  for (const item of items) {
+    const key = `${item.name}\0${item.price}\0${String(item.notes || "").trim()}`;
+    const prev = grouped.get(key);
+    if (prev) prev.qty += item.qty;
+    else grouped.set(key, { ...item, notes: String(item.notes || "").trim() });
+  }
+  return [...grouped.values()];
 }
 
 export async function slipWidth(printerType: "kitchen" | "receipt") {
@@ -140,7 +153,7 @@ export function buildBillSlip(opts: {
   if (opts.guest) wrap(`Guest: ${opts.guest}`, w).forEach((l) => lines.push(l));
   if (opts.server) lines.push(`Server: ${opts.server}`);
   lines.push(new Date().toLocaleString(), rule(w));
-  for (const item of opts.items) {
+  for (const item of combineSlipItems(opts.items)) {
     lines.push(lineItem(item.name, item.qty, item.price, w));
     if (item.notes) wrap(`  ${item.notes}`, w).forEach((l) => lines.push(l));
   }
@@ -191,7 +204,7 @@ export function buildReceiptSlip(opts: {
     new Date().toLocaleString(),
     rule(w),
   ];
-  for (const item of opts.items) {
+  for (const item of combineSlipItems(opts.items)) {
     lines.push(lineItem(item.name, item.qty, item.price, w));
   }
   lines.push(rule(w));
@@ -251,57 +264,109 @@ function sendNetwork(host: string, port: number, payload: Buffer) {
   });
 }
 
+function probePort(host: string, port: number, timeout = 400) {
+  return new Promise<boolean>((resolve) => {
+    const socket = net.connect({ host, port }, () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.setTimeout(timeout);
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.on("error", () => resolve(false));
+  });
+}
+
+export async function discoverNetworkPrinters() {
+  const prefixes = new Set<string>();
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs || []) {
+      if (addr.family !== "IPv4" || addr.internal || addr.address.startsWith("169.254.")) continue;
+      const parts = addr.address.split(".");
+      prefixes.add(`${parts[0]}.${parts[1]}.${parts[2]}`);
+    }
+  }
+  const found: { host: string; port: number }[] = [];
+  await Promise.all(
+    [...prefixes].flatMap((prefix) =>
+      Array.from({ length: 254 }, (_, i) => i + 1).map(async (n) => {
+        const host = `${prefix}.${n}`;
+        if (await probePort(host, 9100)) found.push({ host, port: 9100 });
+      })
+    )
+  );
+  return found.sort((a, b) => a.host.localeCompare(b.host, undefined, { numeric: true }));
+}
+
+function printerPayload(printer: { cashDrawerEnabled: boolean }, content: string, opts: { kickDrawer?: boolean; kitchen?: boolean }) {
+  return escpos(content, {
+    cut: true,
+    kick: Boolean(opts.kickDrawer && printer.cashDrawerEnabled),
+    kitchen: Boolean(opts.kitchen),
+  });
+}
+
+async function sendToDevice(
+  printer: { connection: string; host: string; port: number; cashDrawerEnabled: boolean },
+  content: string,
+  opts: { kickDrawer?: boolean; kitchen?: boolean }
+) {
+  const payload = printerPayload(printer, content, opts);
+  if ((printer.connection === "usb" || printer.connection === "windows") && printer.host) {
+    await sendWindowsRaw(printer.host, payload);
+    return;
+  }
+  if (printer.connection === "network" && printer.host) {
+    await sendNetwork(printer.host, printer.port, payload);
+    return;
+  }
+  throw new Error("Printer is not set to USB or Ethernet");
+}
+
 export async function printToPrinter(opts: {
   printerType: "kitchen" | "receipt";
   title: string;
   content: string;
   kickDrawer?: boolean;
 }) {
-  const printer = await prisma.printer.findFirst({
-    where: { type: opts.printerType, active: true },
-  });
+  const printers = await prisma.printer.findMany({ where: { active: true } });
+  const preferred = printers.filter((p) => p.type === opts.printerType);
+  const fallback = printers.filter((p) => p.type !== opts.printerType);
+  const queue = [...preferred, ...fallback];
 
-  let status = "simulated";
-  let error = "";
+  let status = queue.length ? "failed" : "simulated";
+  let error = queue.length ? "No printer accepted the job" : "";
+  let used = preferred[0] || fallback[0] || null;
 
-  if (printer?.connection === "network" && printer.host) {
+  for (const printer of queue) {
     try {
-      await sendNetwork(
-        printer.host,
-        printer.port,
-        escpos(opts.content, {
-          cut: true,
-          kick: Boolean(opts.kickDrawer && printer.cashDrawerEnabled),
-          kitchen: opts.printerType === "kitchen",
-        })
-      );
+      await sendToDevice(printer, opts.content, {
+        kickDrawer: opts.kickDrawer && opts.printerType === "receipt",
+        kitchen: opts.printerType === "kitchen",
+      });
+      used = printer;
       status = "printed";
+      error = "";
+      break;
     } catch (err) {
-      status = "failed";
       error = err instanceof Error ? err.message : "Print failed";
-    }
-  } else if (opts.kickDrawer && printer?.cashDrawerEnabled && printer.host) {
-    try {
-      await sendNetwork(printer.host, printer.port, escpos("", { cut: false, kick: true }));
-      status = "printed";
-    } catch (err) {
-      status = "failed";
-      error = err instanceof Error ? err.message : "Drawer kick failed";
     }
   }
 
   const job = await prisma.printJob.create({
     data: {
-      printerId: printer?.id,
+      printerId: used?.id,
       type: opts.kickDrawer && opts.printerType === "receipt" ? "receipt_drawer" : opts.printerType,
       title: opts.title,
       content: opts.content,
-      status: printer ? status : "simulated",
+      status,
       error,
     },
   });
 
-  return { job, printer, status: job.status, content: opts.content };
+  return { job, printer: used, status: job.status, content: opts.content };
 }
 
 export async function kickCashDrawer() {
@@ -321,7 +386,15 @@ export async function kickCashDrawer() {
   }
   let status = "simulated";
   let error = "";
-  if (printer.connection === "network") {
+  if (printer.connection === "usb" || printer.connection === "windows") {
+    try {
+      await sendWindowsRaw(printer.host, escpos("", { cut: false, kick: true }));
+      status = "printed";
+    } catch (err) {
+      status = "failed";
+      error = err instanceof Error ? err.message : "Drawer kick failed";
+    }
+  } else if (printer.connection === "network") {
     try {
       await sendNetwork(printer.host, printer.port, escpos("", { cut: false, kick: true }));
       status = "printed";

@@ -1,0 +1,16 @@
+[Unit]
+Description=OmniMind POS (4 Corner)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/omnimind-pos
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npx tsx --env-file=.env server/index.ts
+Restart=always
+RestartSec=3
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target

@@ -9,10 +9,12 @@
     "dev:client": "vite",
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "tsx --env-file=.env server/index.ts",
+    "start:prod": "NODE_ENV=production tsx --env-file=.env server/index.ts",
     "db:push": "prisma db push",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx --env-file=.env prisma/seed.ts",
     "db:import-menu": "tsx --env-file=.env prisma/import-kitchen-menu.ts",
+    "smoke": "tsx --env-file=.env scripts/smoke.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {
@@ -22,6 +24,7 @@
     "@prisma/client": "^6.16.1",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.544.0",

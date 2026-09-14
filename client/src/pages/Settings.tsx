@@ -12,6 +12,11 @@ export function SettingsPage() {
   const [jobs, setJobs] = useState<PrintJob[]>([]);
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [tab, setTab] = useState("restaurant");
+  const [systemPrinters, setSystemPrinters] = useState<{ name: string; portName: string; driverName: string }[]>([]);
+  const [usbName, setUsbName] = useState("");
+  const [ethernetHost, setEthernetHost] = useState("");
+  const [ethernetFound, setEthernetFound] = useState<{ host: string; port: number }[]>([]);
+  const [discovering, setDiscovering] = useState(false);
 
   useEffect(() => setForm(settings), [settings]);
 
@@ -25,6 +30,13 @@ export function SettingsPage() {
     setPrinters(pr.printers);
     setJobs(pr.jobs);
     setUsers(u);
+    try {
+      const sys = await api<{ printers: { name: string; portName: string; driverName: string }[] }>("/api/printers/system");
+      setSystemPrinters(sys.printers || []);
+      setUsbName((current) => current || sys.printers?.[0]?.name || "");
+    } catch {
+      setSystemPrinters([]);
+    }
   }
 
   useEffect(() => {
@@ -129,46 +141,130 @@ export function SettingsPage() {
       {tab === "printers" && (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
-            {printers.map((p) => (
-              <div key={p.id} className="mb-4 rounded-2xl bg-ink-800 p-4 text-sm">
-                <div className="display text-lg">{p.name}</div>
-                <div className="text-cream-100/50">
-                  {p.type} · {p.host}:{p.port} · drawer {p.cashDrawerEnabled ? "yes" : "no"}
-                </div>
-                <div className="mt-2 flex gap-2">
+            <div className="display text-xl">Ethernet (no USB)</div>
+            <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-cream-100/70">
+              <li>Plug the Ethernet cable into the same router as this POS PC (Wi‑Fi is fine on the PC).</li>
+              <li>Power the printer on. USB can stay unplugged.</li>
+              <li>Find the printer IP, or tap Scan network. Self-test: hold FEED while switching power on — the slip often prints the IP.</li>
+              <li>Save, then Test print.</li>
+            </ol>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input
+                value={ethernetHost}
+                onChange={(e) => setEthernetHost(e.target.value)}
+                placeholder="Printer IP e.g. 192.168.1.87"
+                className="min-w-[180px] flex-1 rounded-2xl bg-ink-800 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                disabled={discovering}
+                onClick={async () => {
+                  setDiscovering(true);
+                  try {
+                    const data = await api<{ printers: { host: string; port: number }[] }>("/api/printers/discover");
+                    setEthernetFound(data.printers || []);
+                    if (data.printers?.[0]) setEthernetHost(data.printers[0].host);
+                    toast(data.printers?.length ? `Found ${data.printers.length} printer(s)` : "No Ethernet printer found on port 9100", data.printers?.length ? "ok" : "info");
+                  } catch (err) {
+                    toast(err instanceof Error ? err.message : "Scan failed", "err");
+                  } finally {
+                    setDiscovering(false);
+                  }
+                }}
+                className="rounded-2xl bg-white/5 px-4 py-2 text-sm"
+              >
+                {discovering ? "Scanning…" : "Scan network"}
+              </button>
+              <button
+                type="button"
+                disabled={!ethernetHost.trim()}
+                onClick={async () => {
+                  try {
+                    await api("/api/printers/network-setup", {
+                      method: "POST",
+                      body: JSON.stringify({ host: ethernetHost.trim(), port: 9100, paperWidth: 32 }),
+                    });
+                    toast("Ethernet printer set for kitchen and invoices");
+                    void load();
+                  } catch (err) {
+                    toast(err instanceof Error ? err.message : "Could not save printer", "err");
+                  }
+                }}
+                className="rounded-2xl bg-gold-500 px-4 py-2 text-sm text-ink-950 disabled:opacity-40"
+              >
+                Use Ethernet for kitchen + invoices
+              </button>
+            </div>
+            {ethernetFound.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {ethernetFound.map((p) => (
                   <button
-                    onClick={async () => {
-                      const r = await api<{ status: string; job: PrintJob }>(`/api/printers/${p.id}/test`, {
-                        method: "POST",
-                      });
-                      toast(`Test ${r.status}`);
-                      void load();
-                    }}
-                    className="rounded-xl bg-gold-500 px-3 py-1 text-ink-950"
+                    key={p.host}
+                    type="button"
+                    onClick={() => setEthernetHost(p.host)}
+                    className={`rounded-full px-3 py-1 text-xs ${ethernetHost === p.host ? "bg-gold-500 text-ink-950" : "bg-white/5"}`}
                   >
-                    Test print
+                    {p.host}:{p.port}
                   </button>
-                  {p.type === "receipt" && (
-                    <button
-                      onClick={async () => {
-                        const r = await api<{ status: string }>("/api/printers/drawer", { method: "POST" });
-                        toast(`Drawer ${r.status}`);
-                        void load();
-                      }}
-                      className="rounded-xl bg-white/5 px-3 py-1"
-                    >
-                      Kick drawer
-                    </button>
-                  )}
-                </div>
+                ))}
               </div>
-            ))}
-            <p className="text-xs text-cream-100/50">
-              Bills, receipts, and kitchen tickets print as 80mm slip format. Point kitchen and receipt printers at
-              ESC/POS Ethernet devices (port 9100). USB slip printers can use the browser print dialog (choose POS-80 /
-              80mm). A cash drawer should be plugged into the receipt printer RJ11 port. If a network printer is
-              offline, the slip still opens for printing and is stored in the print log.
+            )}
+            <p className="mt-3 text-xs text-cream-100/50">
+              Do not plug the Ethernet cable into the PC’s Ethernet port unless you set static IPs. Use the router so
+              the printer gets an address on 192.168.1.x like this POS (currently on Wi‑Fi). Port is 9100. USB is
+              optional once Ethernet works.
             </p>
+            <div className="display mt-5 text-xl">USB slip printer</div>
+            <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-cream-100/70">
+              <li>Plug in power and turn the front switch on.</li>
+              <li>Connect the USB cable to this POS computer.</li>
+              <li>Wait until Windows lists the printer (often POS-80, USB, or Xprinter).</li>
+              <li>Choose it below and save — it will print kitchen tickets and invoices.</li>
+            </ol>
+            <select
+              value={usbName}
+              onChange={(e) => setUsbName(e.target.value)}
+              className="mt-3 w-full rounded-2xl bg-ink-800 px-3 py-2 text-sm"
+            >
+              <option value="">{systemPrinters.length ? "Choose Windows printer" : "No Windows printers found"}</option>
+              {systemPrinters.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                  {p.portName ? ` · ${p.portName}` : ""}
+                </option>
+              ))}
+            </select>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!usbName}
+                onClick={async () => {
+                  try {
+                    await api("/api/printers/usb-setup", {
+                      method: "POST",
+                      body: JSON.stringify({ windowsName: usbName }),
+                    });
+                    toast("USB printer set for kitchen and invoices");
+                    void load();
+                  } catch (err) {
+                    toast(err instanceof Error ? err.message : "Could not save printer", "err");
+                  }
+                }}
+                className="rounded-2xl bg-gold-500 px-4 py-2 text-sm text-ink-950 disabled:opacity-40"
+              >
+                Use for kitchen + invoices
+              </button>
+              <button type="button" onClick={() => void load()} className="rounded-2xl bg-white/5 px-4 py-2 text-sm">
+                Refresh list
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-cream-100/50">
+              Your unit is a POS-58 (58mm). After it shows in the list, choose it and tap Use for kitchen + invoices,
+              then Test print. If the list is empty, power the printer on and tap Refresh list.
+            </p>
+            {printers.map((p) => (
+              <PrinterCard key={p.id} printer={p} systemPrinters={systemPrinters} onSaved={() => void load()} />
+            ))}
           </Card>
           <Card>
             <div className="display text-xl">Print log</div>
@@ -209,6 +305,102 @@ export function SettingsPage() {
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+function PrinterCard({
+  printer,
+  systemPrinters,
+  onSaved,
+}: {
+  printer: Printer;
+  systemPrinters: { name: string; portName: string; driverName: string }[];
+  onSaved: () => void;
+}) {
+  const [connection, setConnection] = useState(printer.connection);
+  const [host, setHost] = useState(printer.host);
+  const [port, setPort] = useState(String(printer.port || 9100));
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setConnection(printer.connection);
+    setHost(printer.host);
+    setPort(String(printer.port || 9100));
+  }, [printer.connection, printer.host, printer.port]);
+
+  return (
+    <div className="mt-4 rounded-2xl bg-ink-800 p-4 text-sm">
+      <div className="display text-lg">{printer.name}</div>
+      <div className="text-cream-100/50">
+        {printer.type === "kitchen" ? "Kitchen tickets" : "Bills / receipts"} · {printer.connection}
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <select value={connection} onChange={(e) => setConnection(e.target.value)} className="rounded-xl bg-ink-900 px-3 py-2">
+          <option value="usb">USB / Windows</option>
+          <option value="network">Network (9100)</option>
+        </select>
+        {connection === "usb" ? (
+          <select value={host} onChange={(e) => setHost(e.target.value)} className="rounded-xl bg-ink-900 px-3 py-2">
+            <option value="">Windows printer</option>
+            {systemPrinters.map((p) => (
+              <option key={p.name} value={p.name}>
+                {p.name}
+              </option>
+            ))}
+            {host && !systemPrinters.some((p) => p.name === host) && <option value={host}>{host}</option>}
+          </select>
+        ) : (
+          <>
+            <input value={host} onChange={(e) => setHost(e.target.value)} className="rounded-xl bg-ink-900 px-3 py-2" placeholder="IP address" />
+            <input value={port} onChange={(e) => setPort(e.target.value)} className="rounded-xl bg-ink-900 px-3 py-2 sm:col-span-2" placeholder="Port" />
+          </>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await api(`/api/printers/${printer.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  connection,
+                  host,
+                  port: Number(port || 0),
+                  active: true,
+                }),
+              });
+              toast("Printer saved");
+              onSaved();
+            } catch (err) {
+              toast(err instanceof Error ? err.message : "Save failed", "err");
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="rounded-xl bg-white/5 px-3 py-1"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              const r = await api<{ status: string }>(`/api/printers/${printer.id}/test`, { method: "POST" });
+              toast(r.status === "printed" ? "Test slip printed" : `Test ${r.status}`, r.status === "printed" ? "ok" : "info");
+              onSaved();
+            } catch (err) {
+              toast(err instanceof Error ? err.message : "Test failed", "err");
+            }
+          }}
+          className="rounded-xl bg-gold-500 px-3 py-1 text-ink-950"
+        >
+          Test print
+        </button>
+      </div>
     </div>
   );
 }

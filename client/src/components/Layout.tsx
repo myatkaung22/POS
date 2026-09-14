@@ -10,6 +10,7 @@ import {
   Table2,
   UtensilsCrossed,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { useEffect, useState } from "react";
@@ -26,6 +27,7 @@ const links = [
   { to: "/menu", label: "Menu", icon: LayoutGrid, perm: "menu" },
   { to: "/inbox", label: "Inbox", icon: Bell, perm: "inbox" },
   { to: "/reports", label: "Reports", icon: BarChart3, perm: "reports" },
+  { to: "/ask", label: "Ask (Beta)", icon: Sparkles, perm: "reports" },
   { to: "/settings", label: "Settings", icon: Settings2, perm: "settings" },
 ];
 
@@ -180,6 +182,7 @@ function headerTitle(path: string) {
   if (path.startsWith("/menu")) return "Menu";
   if (path.startsWith("/inbox")) return "Inbox";
   if (path.startsWith("/reports")) return "Reports";
+  if (path.startsWith("/ask")) return "Ask (Beta)";
   if (path.startsWith("/orders")) return "History";
   if (path.startsWith("/settings")) return "Settings";
   return "POS";

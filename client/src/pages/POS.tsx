@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Check, Minus, Plus, Printer, Send, Trash2 } from "lucide-react";
+import { Check, Minus, Plus, Printer, Receipt, Search, Send, Table2, Trash2, X } from "lucide-react";
 import { api } from "../api";
 import { getSocket } from "../socket";
 import { useAuth } from "../auth";
@@ -9,6 +9,14 @@ import { useQrAlerts } from "../alerts";
 import { money, DEFAULT_CURRENCY, type Category, type DiningTable, type Order, type Promotion } from "../types";
 import { DishPhoto } from "../components/DishPhoto";
 import { printSlip } from "../printSlip";
+
+function isServedItem(status: string) {
+  return status === "served" || status === "cancelled";
+}
+
+function canServeItem(status: string) {
+  return ["sent", "preparing", "ready"].includes(status);
+}
 
 export function PosPage() {
   const { settings, can } = useAuth();
@@ -20,6 +28,7 @@ export function PosPage() {
   const [promos, setPromos] = useState<Promotion[]>([]);
   const [order, setOrder] = useState<Order | null>(null);
   const [categoryId, setCategoryId] = useState<string>("all");
+  const [query, setQuery] = useState("");
   const [note, setNote] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [method, setMethod] = useState("cash");
@@ -31,6 +40,7 @@ export function PosPage() {
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestAddress, setGuestAddress] = useState("");
+  const [posTab, setPosTab] = useState<"tables" | "check">("tables");
 
   const tableId = params.get("table") || "";
   const type = params.get("type") || "";
@@ -108,10 +118,24 @@ export function PosPage() {
 
   const items = useMemo(() => {
     const all = menu.flatMap((c) => c.items.map((i) => ({ ...i, categoryName: c.name })));
-    return categoryId === "all" ? all : all.filter((i) => i.categoryId === categoryId);
-  }, [menu, categoryId]);
+    const byCat = categoryId === "all" ? all : all.filter((i) => i.categoryId === categoryId);
+    const q = query.trim().toLowerCase();
+    if (!q) return byCat;
+    return byCat.filter(
+      (i) =>
+        i.name.toLowerCase().includes(q) ||
+        i.description.toLowerCase().includes(q) ||
+        i.sku.toLowerCase().includes(q) ||
+        i.categoryName.toLowerCase().includes(q)
+    );
+  }, [menu, categoryId, query]);
+  const activeCategory = menu.find((c) => c.id === categoryId);
 
   const pendingGuest = order?.items.filter((i) => i.status === "pending") || [];
+  const ticketItems = useMemo(() => {
+    if (!order) return [];
+    return [...order.items].sort((a, b) => Number(isServedItem(a.status)) - Number(isServedItem(b.status)));
+  }, [order]);
   const tableAlerts = alerts.filter((a) => a.tableId && a.tableId !== tableId);
 
   function selectTable(id: string) {
@@ -138,6 +162,15 @@ export function PosPage() {
     const next = await api<Order>(`/api/orders/${order.id}/items/${itemId}`, {
       method: "PATCH",
       body: JSON.stringify({ qty }),
+    });
+    setOrder(next);
+  }
+
+  async function markServed(itemId: string) {
+    if (!order) return;
+    const next = await api<Order>(`/api/orders/${order.id}/item-status`, {
+      method: "POST",
+      body: JSON.stringify({ itemIds: [itemId], status: "served" }),
     });
     setOrder(next);
   }
@@ -187,7 +220,7 @@ export function PosPage() {
       if (data.content && data.print?.status !== "printed") {
         printSlip(`Kitchen #${data.order.orderNo}`, data.content);
       }
-      toast(data.print?.status === "printed" ? "Kitchen slip printed" : "Kitchen slip ready to print", "info");
+      toast(data.print?.status === "printed" ? "Sent to kitchen · slip printed" : "Sent to kitchen", "info");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed", "err");
     }
@@ -229,8 +262,36 @@ export function PosPage() {
   const step = !order ? 0 : pendingGuest.length ? 1 : order.status === "open" ? 1 : 2;
 
   return (
-    <div className="flex min-h-0 flex-col gap-4 lg:grid lg:h-[calc(100dvh-7.25rem)] lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]">
-      <section className="flex min-h-0 flex-col rounded-[28px] border border-white/8 bg-ink-900">
+    <div className="flex min-h-0 flex-col gap-3 lg:h-[calc(100dvh-7.25rem)]">
+      <div className="grid shrink-0 grid-cols-2 rounded-[24px] border border-white/8 bg-ink-900 p-1">
+        <button
+          type="button"
+          onClick={() => setPosTab("tables")}
+          className={`flex items-center justify-center gap-2 rounded-[20px] py-2.5 text-sm ${
+            posTab === "tables" ? "bg-gold-500 text-ink-950" : "text-cream-100/55"
+          }`}
+        >
+          <Table2 size={16} />
+          Tables
+        </button>
+        <button
+          type="button"
+          onClick={() => setPosTab("check")}
+          className={`relative flex items-center justify-center gap-2 rounded-[20px] py-2.5 text-sm ${
+            posTab === "check" ? "bg-gold-500 text-ink-950" : "text-cream-100/55"
+          }`}
+        >
+          <Receipt size={16} />
+          Check
+          {order?.items.length ? (
+            <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${posTab === "check" ? "bg-ink-950/15" : "bg-gold-500/20 text-gold-400"}`}>
+              {order.items.reduce((n, i) => n + i.qty, 0)}
+            </span>
+          ) : null}
+        </button>
+      </div>
+      {posTab === "tables" && (
+      <section className="flex min-h-0 flex-1 flex-col rounded-[28px] border border-white/8 bg-ink-900">
         <div className="border-b border-white/5 p-3">
           <div className="mb-2 flex flex-col gap-1 px-1 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-[11px] tracking-[0.16em] text-sage-400 uppercase">Tables</div>
@@ -257,7 +318,7 @@ export function PosPage() {
             />
             {tables.map((t) => {
               const open = t.orders?.[0];
-              const guest = Boolean(open?.items.some((i) => i.status === "pending"));
+              const guest = Boolean(open?.type === "qr" && open.items?.some((i) => i.status === "pending"));
               const tone = guest ? "guest" : t.status === "occupied" || t.status === "billing" ? "seated" : "free";
               return (
                 <TableChip
@@ -295,20 +356,61 @@ export function PosPage() {
             </button>
           </div>
         )}
-        <div className="flex gap-2 overflow-auto border-b border-white/5 px-3 py-2">
-          <Chip active={categoryId === "all"} onClick={() => setCategoryId("all")}>
-            All
-          </Chip>
-          {menu.map((c) => (
-            <Chip key={c.id} active={categoryId === c.id} onClick={() => setCategoryId(c.id)}>
-              {c.name}
+        <div className="space-y-2 border-b border-white/5 px-3 py-2">
+          <label className="relative block">
+            <Search size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sage-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search dishes, SKU, or category"
+              className="w-full rounded-2xl bg-ink-800 py-2.5 pr-9 pl-9 text-sm outline-none placeholder:text-cream-100/35"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-1 text-sage-400 hover:text-cream-50"
+                aria-label="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </label>
+          <div className="flex gap-2 overflow-auto pb-0.5">
+            <Chip active={categoryId === "all"} onClick={() => setCategoryId("all")}>
+              All
             </Chip>
-          ))}
+            {menu.map((c) => (
+              <Chip key={c.id} active={categoryId === c.id} onClick={() => setCategoryId(c.id)}>
+                {c.name}
+              </Chip>
+            ))}
+          </div>
+          <div className="px-1 text-[11px] text-cream-100/40">
+            {items.length} dish{items.length === 1 ? "" : "es"}
+            {activeCategory ? ` in ${activeCategory.name}` : ""}
+            {query.trim() ? ` matching “${query.trim()}”` : ""}
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-3">
           {!order && (
             <div className="mb-3 rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-cream-100/50">
               Pick a table, Takeaway, or Delivery to start a ticket.
+            </div>
+          )}
+          {items.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-cream-100/50">
+              No dishes match{query.trim() ? ` “${query.trim()}”` : ""}
+              {activeCategory ? ` in ${activeCategory.name}` : ""}.
+              {categoryId !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => setCategoryId("all")}
+                  className="mt-3 block w-full text-gold-400"
+                >
+                  Search all categories
+                </button>
+              )}
             </div>
           )}
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 2xl:grid-cols-4">
@@ -320,6 +422,7 @@ export function PosPage() {
                 className="rounded-[22px] border border-white/8 bg-ink-800 p-2.5 text-left transition hover:border-gold-400/50 hover:bg-ink-700 disabled:opacity-35"
               >
                 <DishPhoto item={item} className="mb-2 aspect-[4/3] w-full rounded-2xl" />
+                <div className="px-1 text-[10px] tracking-wide text-sage-400 uppercase">{item.categoryName}</div>
                 <div className="flex items-start justify-between gap-2 px-1">
                   <div className="min-w-0 font-medium leading-snug">{item.name}</div>
                   <span className="shrink-0 text-sm text-gold-400">{money(item.price, currency)}</span>
@@ -330,8 +433,10 @@ export function PosPage() {
           </div>
         </div>
       </section>
+      )}
 
-      <aside className="flex min-h-0 flex-col rounded-[28px] border border-white/8 bg-ink-900">
+      {posTab === "check" && (
+      <aside className="flex min-h-0 flex-1 flex-col rounded-[28px] border border-white/8 bg-ink-900">
         <div className="border-b border-white/5 p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -346,7 +451,7 @@ export function PosPage() {
               </div>
               <div className="display text-2xl leading-none sm:text-3xl">#{order?.orderNo || "—"}</div>
             </div>
-            {order && <StatusPill status={order.status} guest={pendingGuest.length > 0} />}
+            {order && <StatusPill status={order.status} guest={pendingGuest.length > 0} items={order.items} />}
           </div>
           <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[11px]">
             {["Add", "Kitchen", "Pay"].map((label, i) => (
@@ -394,10 +499,19 @@ export function PosPage() {
               )}
             </div>
           )}
-          {order?.items.map((item) => (
+          {ticketItems.map((item, index) => (
+            <div key={item.id}>
+              {isServedItem(item.status) && (index === 0 || !isServedItem(ticketItems[index - 1]?.status)) && (
+                <div className="mt-3 mb-2 px-1 text-[11px] tracking-[0.16em] text-cream-100/35 uppercase">Served</div>
+              )}
             <div
-              key={item.id}
-              className={`mb-2 rounded-2xl p-3 ${item.status === "pending" ? "bg-sky-400/10 ring-1 ring-sky-400/30" : "bg-ink-800"}`}
+              className={`mb-2 rounded-2xl p-3 ${
+                item.status === "pending"
+                  ? "bg-sky-400/10 ring-1 ring-sky-400/30"
+                  : item.status === "served"
+                    ? "bg-ink-800/70 opacity-70"
+                    : "bg-ink-800"
+              }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -415,15 +529,25 @@ export function PosPage() {
                 )}
               </div>
               <div className="mt-2 flex items-center gap-2">
-                <button disabled={locked} onClick={() => void setQty(item.id, item.qty - 1)} className="rounded-lg bg-white/5 p-1">
+                <button disabled={locked || item.status === "served"} onClick={() => void setQty(item.id, item.qty - 1)} className="rounded-lg bg-white/5 p-1 disabled:opacity-35">
                   <Minus size={14} />
                 </button>
                 <span className="w-6 text-center tabular-nums">{item.qty}</span>
-                <button disabled={locked} onClick={() => void setQty(item.id, item.qty + 1)} className="rounded-lg bg-white/5 p-1">
+                <button disabled={locked || item.status === "served"} onClick={() => void setQty(item.id, item.qty + 1)} className="rounded-lg bg-white/5 p-1 disabled:opacity-35">
                   <Plus size={14} />
                 </button>
+                {canServeItem(item.status) && !locked && (
+                  <button
+                    onClick={() => void markServed(item.id)}
+                    className="inline-flex items-center gap-1 rounded-full bg-gold-500/20 px-2.5 py-1 text-[11px] text-gold-400"
+                  >
+                    <Check size={12} />
+                    Served
+                  </button>
+                )}
                 <span className="ml-auto text-sm tabular-nums">{money(item.price * item.qty, currency)}</span>
               </div>
+            </div>
             </div>
           ))}
         </div>
@@ -497,6 +621,7 @@ export function PosPage() {
           </div>
         </div>
       </aside>
+      )}
 
       {payOpen && order && (
         <div className="fixed inset-0 z-[60] grid place-items-end bg-black/65 p-3 sm:place-items-center sm:p-4">
@@ -634,11 +759,25 @@ function Row({ label, value, big }: { label: string; value: string; big?: boolea
   );
 }
 
-function StatusPill({ status, guest }: { status: string; guest: boolean }) {
-  const label = guest ? "Guest order" : status === "in_kitchen" ? "In kitchen" : status === "completed" ? "Paid" : status;
+function allItemsServed(items?: { status: string }[]) {
+  const live = (items || []).filter((i) => i.status !== "cancelled");
+  return live.length > 0 && live.every((i) => i.status === "served");
+}
+
+function StatusPill({ status, guest, items }: { status: string; guest: boolean; items?: { status: string }[] }) {
+  const served = allItemsServed(items);
+  const label = guest
+    ? "Guest order"
+    : served
+      ? "Served"
+      : status === "in_kitchen"
+        ? "In kitchen"
+        : status === "completed"
+          ? "Paid"
+          : status;
   const cls = guest
     ? "bg-sky-400/15 text-sky-300"
-    : status === "completed"
+    : served || status === "completed"
       ? "bg-sage-500/15 text-sage-400"
       : "bg-gold-500/15 text-gold-400";
   return <span className={`rounded-full px-2.5 py-1 text-[11px] tracking-wide uppercase ${cls}`}>{label}</span>;

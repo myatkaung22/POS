@@ -5,10 +5,13 @@ import { prisma, getSettingsMap, nextOrderNo, orderInclude } from "./db.ts";
 import { authRequired, findUserForLogin, requirePermission, signToken } from "./auth.ts";
 import { calcPricing } from "./pricing.ts";
 import { buildInvoicePdf, buildOrderSlipText } from "./invoice.ts";
-import { buildKitchenSlip, buildReceiptSlip, kickCashDrawer, printToPrinter, slipWidth } from "./printer.ts";
+import { buildKitchenSlip, buildReceiptSlip, discoverNetworkPrinters, kickCashDrawer, printToPrinter, slipWidth } from "./printer.ts";
+import { listWindowsPrinters, paperWidthForPrinter } from "./windows-print.ts";
 import { emitAll, pushInbox } from "./realtime.ts";
-import { PERMISSIONS } from "./permissions.ts";
+import { PERMISSIONS, assertPermission } from "./permissions.ts";
 import { currencySymbol, formatMoney } from "./currency.ts";
+import { buildReport, buildReportWorkbook, reportFileName } from "./reports.ts";
+import { answerQuestion, type AskMessage } from "./ask.ts";
 import { asBool, publicImageUrl, removeImageFile, withMenuImage } from "./uploads.ts";
 
 function money(n: number) {
@@ -46,15 +49,22 @@ async function reprice(orderId: string) {
   });
 }
 
+function occupancyFromOrder(order?: { status: string; items?: { status: string }[] } | null) {
+  if (!order) return "available";
+  if (order.status === "billed") return "billing";
+  if (order.status === "in_kitchen") return "occupied";
+  if ((order.items || []).some((item) => ["sent", "preparing", "ready", "served"].includes(item.status))) return "occupied";
+  return "available";
+}
+
 async function syncTableStatus(tableId?: string | null) {
   if (!tableId) return;
   const open = await prisma.order.findFirst({
     where: { tableId, status: { in: ["open", "in_kitchen", "billed"] } },
+    include: { items: true },
     orderBy: { createdAt: "desc" },
   });
-  let status = "available";
-  if (open?.status === "billed") status = "billing";
-  else if (open) status = "occupied";
+  const status = occupancyFromOrder(open);
   const table = await prisma.diningTable.update({
     where: { id: tableId },
     data: { status },
@@ -283,17 +293,27 @@ export function registerRoutes(app: Express) {
         },
       },
     });
-    res.json(tables);
+    res.json(tables.map((table) => ({ ...table, status: occupancyFromOrder(table.orders[0]) })));
   }));
 
   app.post("/api/tables", authRequired, requirePermission("settings"), asyncHandler(async (req, res) => {
     const max = await prisma.diningTable.aggregate({ _max: { number: true } });
-    const number = req.body.number ?? (max._max.number || 0) + 1;
+    const number = req.body.number !== undefined && req.body.number !== "" ? Number(req.body.number) : (max._max.number || 0) + 1;
+    if (!Number.isInteger(number) || number < 1) {
+      res.status(400).json({ error: "Table number must be 1 or higher" });
+      return;
+    }
+    const clash = await prisma.diningTable.findFirst({ where: { number } });
+    if (clash) {
+      res.status(400).json({ error: `Table ${number} already exists` });
+      return;
+    }
+    const seats = req.body.seats !== undefined && req.body.seats !== "" ? Number(req.body.seats) : 4;
     const table = await prisma.diningTable.create({
       data: {
         number,
-        name: req.body.name || `Table ${number}`,
-        seats: req.body.seats ?? 4,
+        name: String(req.body.name || `Table ${number}`).trim() || `Table ${number}`,
+        seats: Number.isFinite(seats) && seats > 0 ? seats : 4,
         qrToken: `tbl-${number}-${Math.random().toString(36).slice(2, 8)}`,
         posX: req.body.posX ?? 10,
         posY: req.body.posY ?? 10,
@@ -304,11 +324,29 @@ export function registerRoutes(app: Express) {
   }));
 
   app.patch("/api/tables/:id", authRequired, requirePermission("tables"), asyncHandler(async (req, res) => {
+    const current = await prisma.diningTable.findUnique({ where: { id: req.params.id } });
+    if (!current) {
+      res.status(404).json({ error: "Table not found" });
+      return;
+    }
+    if (req.body.number !== undefined) {
+      const number = Number(req.body.number);
+      if (!Number.isInteger(number) || number < 1) {
+        res.status(400).json({ error: "Table number must be 1 or higher" });
+        return;
+      }
+      const clash = await prisma.diningTable.findFirst({ where: { number, id: { not: current.id } } });
+      if (clash) {
+        res.status(400).json({ error: `Table ${number} already exists` });
+        return;
+      }
+    }
     const table = await prisma.diningTable.update({
       where: { id: req.params.id },
       data: {
-        name: req.body.name,
-        seats: req.body.seats,
+        name: req.body.name !== undefined ? String(req.body.name).trim() || current.name : undefined,
+        number: req.body.number !== undefined ? Number(req.body.number) : undefined,
+        seats: req.body.seats !== undefined && req.body.seats !== "" ? Number(req.body.seats) : undefined,
         status: req.body.status,
         posX: req.body.posX,
         posY: req.body.posY,
@@ -317,6 +355,25 @@ export function registerRoutes(app: Express) {
     });
     emitAll("table:updated", table);
     res.json(table);
+  }));
+
+  app.delete("/api/tables/:id", authRequired, requirePermission("settings"), asyncHandler(async (req, res) => {
+    const table = await prisma.diningTable.findUnique({ where: { id: req.params.id } });
+    if (!table) {
+      res.status(404).json({ error: "Table not found" });
+      return;
+    }
+    const open = await prisma.order.findFirst({
+      where: { tableId: table.id, status: { in: ["open", "in_kitchen", "billed"] } },
+    });
+    if (open) {
+      res.status(400).json({ error: `Table ${table.number} has an open ticket. Pay or cancel it first.` });
+      return;
+    }
+    await prisma.order.updateMany({ where: { tableId: table.id }, data: { tableId: null } });
+    await prisma.diningTable.delete({ where: { id: table.id } });
+    emitAll("table:updated", { id: table.id, deleted: true });
+    res.json({ ok: true });
   }));
 
   app.get("/api/tables/:id/qr", authRequired, asyncHandler(async (req, res) => {
@@ -451,7 +508,7 @@ export function registerRoutes(app: Express) {
     }
 
     const updated = await reprice(order.id);
-    await prisma.diningTable.update({ where: { id: table.id }, data: { status: "occupied" } });
+    await syncTableStatus(table.id);
     const pending = updated.items.filter((i) => i.status === "pending");
     const itemSummary = pending.map((i) => `${i.qty}× ${i.name}`).join(", ");
     await pushInbox({
@@ -461,7 +518,6 @@ export function registerRoutes(app: Express) {
       meta: { orderId: updated.id, tableId: table.id },
     });
     emitAll("order:updated", updated);
-    emitAll("table:updated", { ...table, status: "occupied" });
     emitAll("pos:qr-order", {
       orderId: updated.id,
       orderNo: updated.orderNo,
@@ -716,8 +772,14 @@ export function registerRoutes(app: Express) {
     res.json({ order: updated, print, content });
   }));
 
-  app.post("/api/orders/:id/item-status", authRequired, requirePermission("kitchen"), asyncHandler(async (req, res) => {
+  app.post("/api/orders/:id/item-status", authRequired, asyncHandler(async (req, res) => {
     const { itemIds, status } = req.body as { itemIds: string[]; status: string };
+    const allowed = ["sent", "preparing", "ready", "served"];
+    if (!allowed.includes(status) || !Array.isArray(itemIds) || !itemIds.length) {
+      res.status(400).json({ error: "Invalid item status" });
+      return;
+    }
+    assertPermission(req.user?.role || "", status === "served" ? "pos" : "kitchen");
     await prisma.orderItem.updateMany({
       where: { id: { in: itemIds }, orderId: req.params.id },
       data: { status },
@@ -728,7 +790,7 @@ export function registerRoutes(app: Express) {
     });
     if (updated && ["takeaway", "delivery"].includes(updated.type) && status === "ready") {
       const remaining = updated.items.filter(
-        (i) => i.status !== "cancelled" && i.status !== "pending" && i.status !== "ready"
+        (i) => i.status !== "cancelled" && i.status !== "pending" && i.status !== "ready" && i.status !== "served"
       );
       if (!remaining.length) {
         updated = await prisma.order.update({
@@ -780,7 +842,7 @@ export function registerRoutes(app: Express) {
       res.status(404).json({ error: "Order not found" });
       return;
     }
-    const items = order.items.filter((i) => i.status !== "cancelled" && i.status !== "pending");
+    const items = order.items.filter((i) => i.status !== "cancelled" && i.status !== "pending" && i.status !== "served");
     if (!items.length) {
       res.status(400).json({ error: "No kitchen items to print" });
       return;
@@ -1026,6 +1088,80 @@ export function registerRoutes(app: Express) {
     res.json({ printers, jobs });
   }));
 
+  app.get("/api/printers/system", authRequired, requirePermission("printers"), asyncHandler(async (_req, res) => {
+    res.json({ printers: await listWindowsPrinters() });
+  }));
+
+  app.get("/api/printers/discover", authRequired, requirePermission("printers"), asyncHandler(async (_req, res) => {
+    res.json({ printers: await discoverNetworkPrinters() });
+  }));
+
+  app.post("/api/printers/network-setup", authRequired, requirePermission("printers"), asyncHandler(async (req, res) => {
+    const host = String(req.body.host || "").trim();
+    const port = Number(req.body.port || 9100);
+    if (!host) {
+      res.status(400).json({ error: "Enter the printer IP address" });
+      return;
+    }
+    const paperWidth = Number(req.body.paperWidth || 32);
+    const roles = [
+      { type: "kitchen", name: "Kitchen Ethernet", cashDrawerEnabled: false },
+      { type: "receipt", name: "Receipt / invoice Ethernet", cashDrawerEnabled: Boolean(req.body.cashDrawer) },
+    ];
+    const saved = [];
+    for (const role of roles) {
+      const existing = await prisma.printer.findFirst({ where: { type: role.type } });
+      const data = {
+        name: role.name,
+        type: role.type,
+        connection: "network",
+        host,
+        port,
+        paperWidth,
+        cashDrawerEnabled: role.cashDrawerEnabled,
+        active: true,
+      };
+      saved.push(
+        existing
+          ? await prisma.printer.update({ where: { id: existing.id }, data })
+          : await prisma.printer.create({ data })
+      );
+    }
+    res.json({ printers: saved, host, port });
+  }));
+
+  app.post("/api/printers/usb-setup", authRequired, requirePermission("printers"), asyncHandler(async (req, res) => {
+    const windowsName = String(req.body.windowsName || "").trim();
+    if (!windowsName) {
+      res.status(400).json({ error: "Choose a Windows printer" });
+      return;
+    }
+    const roles = [
+      { type: "kitchen", name: "Kitchen USB", cashDrawerEnabled: false },
+      { type: "receipt", name: "Receipt / invoice USB", cashDrawerEnabled: Boolean(req.body.cashDrawer) },
+    ];
+    const saved = [];
+    for (const role of roles) {
+      const existing = await prisma.printer.findFirst({ where: { type: role.type } });
+      const data = {
+        name: role.name,
+        type: role.type,
+        connection: "usb",
+        host: windowsName,
+        port: 0,
+        paperWidth: paperWidthForPrinter(windowsName),
+        cashDrawerEnabled: role.cashDrawerEnabled,
+        active: true,
+      };
+      saved.push(
+        existing
+          ? await prisma.printer.update({ where: { id: existing.id }, data })
+          : await prisma.printer.create({ data })
+      );
+    }
+    res.json({ printers: saved, windowsName });
+  }));
+
   app.post("/api/printers", authRequired, requirePermission("printers"), asyncHandler(async (req, res) => {
     const printer = await prisma.printer.create({
       data: {
@@ -1088,87 +1224,41 @@ export function registerRoutes(app: Express) {
   }));
 
   app.get("/api/reports", authRequired, requirePermission("reports"), asyncHandler(async (req, res) => {
-    const range = (req.query.range as string) || "daily";
-    const now = new Date();
-    const start = new Date(now);
-    if (range === "weekly") start.setDate(now.getDate() - 6);
-    else if (range === "monthly") start.setDate(now.getDate() - 29);
-    else start.setHours(0, 0, 0, 0);
-    if (range !== "daily") start.setHours(0, 0, 0, 0);
-
-    const orders = await prisma.order.findMany({
-      where: {
-        status: { in: ["paid", "completed"] },
-        completedAt: { gte: start },
-      },
-      include: { items: true, table: true },
+    const report = await buildReport({
+      period: String(req.query.period || req.query.range || "day"),
+      date: String(req.query.date || ""),
+      month: String(req.query.month || ""),
+      year: String(req.query.year || ""),
+      category: String(req.query.category || ""),
     });
-    const paid = orders.length
-      ? orders
-      : await prisma.order.findMany({
-          where: {
-            status: { in: ["paid", "completed"] },
-            createdAt: { gte: start },
-          },
-          include: { items: true, table: true },
-        });
-
-    const source = paid;
-    const totalSales = money(source.reduce((s, o) => s + o.total, 0));
-    const orderCount = source.length;
-    const avgTicket = orderCount ? money(totalSales / orderCount) : 0;
-    const itemCount = source.reduce(
-      (s, o) => s + o.items.filter((i) => i.status !== "cancelled").reduce((n, i) => n + i.qty, 0),
-      0
-    );
-
-    const buckets = new Map<string, { label: string; sales: number; orders: number }>();
-    const keyOf = (d: Date) => {
-      if (range === "daily") return `${d.getHours()}:00`;
-      return d.toISOString().slice(0, 10);
-    };
-    if (range === "daily") {
-      for (let h = 0; h < 24; h++) buckets.set(`${h}:00`, { label: `${String(h).padStart(2, "0")}:00`, sales: 0, orders: 0 });
-    }
-    for (const order of source) {
-      const when = order.completedAt || order.createdAt;
-      const key = keyOf(when);
-      const current = buckets.get(key) || { label: key, sales: 0, orders: 0 };
-      current.sales = money(current.sales + order.total);
-      current.orders += 1;
-      buckets.set(key, current);
-    }
-
-    const itemMap = new Map<string, { name: string; qty: number; sales: number }>();
-    for (const order of source) {
-      for (const item of order.items.filter((i) => i.status !== "cancelled")) {
-        const row = itemMap.get(item.name) || { name: item.name, qty: 0, sales: 0 };
-        row.qty += item.qty;
-        row.sales = money(row.sales + item.qty * item.price);
-        itemMap.set(item.name, row);
-      }
-    }
-
-    const methods = new Map<string, number>();
-    for (const order of source) {
-      const m = order.paymentMethod || "unknown";
-      methods.set(m, money((methods.get(m) || 0) + order.total));
-    }
-
-    const types = new Map<string, number>();
-    for (const order of source) {
-      types.set(order.type, money((types.get(order.type) || 0) + order.total));
-    }
-
     res.json({
-      range,
-      start: start.toISOString(),
-      end: now.toISOString(),
-      summary: { totalSales, orderCount, avgTicket, itemCount },
-      series: [...buckets.values()],
-      topItems: [...itemMap.values()].sort((a, b) => b.qty - a.qty).slice(0, 8),
-      payments: [...methods.entries()].map(([method, amount]) => ({ method, amount })),
-      types: [...types.entries()].map(([type, amount]) => ({ type, amount })),
+      ...report,
+      start: report.start.toISOString(),
+      end: report.end.toISOString(),
     });
+  }));
+
+  app.get("/api/reports/export.xlsx", authRequired, requirePermission("reports"), asyncHandler(async (req, res) => {
+    const report = await buildReport({
+      period: String(req.query.period || "day"),
+      date: String(req.query.date || ""),
+      month: String(req.query.month || ""),
+      year: String(req.query.year || ""),
+      category: String(req.query.category || ""),
+    });
+    const settings = await getSettingsMap();
+    const wb = await buildReportWorkbook(report, settings.restaurantName || "4 Corner Bar & Restaurant");
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${reportFileName(report)}"`);
+    res.send(buffer);
+  }));
+
+  app.post("/api/ask", authRequired, requirePermission("reports"), asyncHandler(async (req, res) => {
+    const question = String(req.body?.question || req.body?.q || "").trim();
+    const history = Array.isArray(req.body?.history)
+      ? (req.body.history as AskMessage[]).filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+      : [];
+    res.json(await answerQuestion(question, history));
   }));
 }

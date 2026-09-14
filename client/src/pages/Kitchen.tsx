@@ -65,7 +65,8 @@ export function KitchenPage() {
           </div>
           <ul className="mt-4 space-y-2">
             {order.items
-              .filter((i) => i.status !== "cancelled" && i.status !== "pending")
+              .filter((i) => !["cancelled", "pending", "served"].includes(i.status))
+              .sort((a, b) => Number(a.status === "ready") - Number(b.status === "ready"))
               .map((item) => (
                 <li key={item.id} className="flex justify-between rounded-2xl bg-ink-800 px-3 py-2">
                   <span>

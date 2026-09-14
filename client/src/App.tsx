@@ -11,6 +11,7 @@ import { KitchenPage } from "./pages/Kitchen";
 import { MenuPage } from "./pages/Menu";
 import { InboxPage } from "./pages/Inbox";
 import { ReportsPage } from "./pages/Reports";
+import { AskPage } from "./pages/Ask";
 import { OrdersPage } from "./pages/Orders";
 import { SettingsPage } from "./pages/Settings";
 import { QRMenuPage } from "./pages/QRMenu";
@@ -70,6 +71,7 @@ export function App() {
                 </Route>
                 <Route element={<Perm permission="reports" />}>
                   <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/ask" element={<AskPage />} />
                 </Route>
                 <Route element={<Perm permission="orders" />}>
                   <Route path="/orders" element={<OrdersPage />} />
