@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --color-ink-950: #07110f;
+  --color-ink-900: #0c1b17;
+  --color-ink-800: #14251f;
+  --color-ink-700: #1d332c;
+  --color-ink-600: #2a463c;
+  --color-sage-400: #9fbfa8;
+  --color-sage-500: #7ea58a;
+  --color-gold-400: #e4c37a;
+  --color-gold-500: #d4a84b;
+  --color-cream-50: #f6f1e6;
+  --color-cream-100: #ebe3d2;
+  --color-rose-400: #e08b7a;
+  --color-sky-300: #8ed7e8;
+  --color-sky-400: #5ec4db;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  min-height: 100dvh;
+}
+
+body {
+  margin: 0;
+  background: #07110f;
+  color: #f6f1e6;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a463c;
+  border-radius: 99px;
+}
+
+.display {
+  font-family: var(--font-display);
+}
+
+.alert-pop {
+  animation: alertIn 0.35s ease-out;
+}
+
+@keyframes alertIn {
+  from {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.pulse-ring {
+  animation: pulseRing 1.6s ease-out infinite;
+}
+
+@keyframes pulseRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(94, 196, 219, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgba(94, 196, 219, 0);
+  }
+}

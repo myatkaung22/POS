@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-server
+.env
+*.db
+*.db-journal
+prisma/dev.db
+prisma/dev.db-journal
+uploads/menu/*
+!uploads/menu/.gitkeep
+.DS_Store
+Thumbs.db

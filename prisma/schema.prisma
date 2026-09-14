@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  pinHash       String?
+  passwordHash  String
+  role          String
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  waiterOrders  Order[]  @relation("WaiterOrders")
+  cashierOrders Order[]  @relation("CashierOrders")
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  sortOrder Int        @default(0)
+  active    Boolean    @default(true)
+  items     MenuItem[]
+}
+
+model MenuItem {
+  id           String      @id @default(cuid())
+  categoryId   String
+  category     Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name         String
+  description  String      @default("")
+  price        Float
+  emoji        String      @default("🍽️")
+  sku          String      @default("")
+  available    Boolean     @default(true)
+  kitchenPrint Boolean     @default(true)
+  sortOrder    Int         @default(0)
+  imageUrl     String      @default("")
+  orderItems   OrderItem[]
+}
+
+model DiningTable {
+  id      String  @id @default(cuid())
+  number  Int     @unique
+  name    String
+  seats   Int     @default(4)
+  qrToken String  @unique
+  status  String  @default("available")
+  posX    Float   @default(0)
+  posY    Float   @default(0)
+  active  Boolean @default(true)
+  orders  Order[]
+}
+
+model Promotion {
+  id        String    @id @default(cuid())
+  name      String
+  type      String
+  value     Float
+  minOrder  Float     @default(0)
+  active    Boolean   @default(true)
+  startDate DateTime?
+  endDate   DateTime?
+  orders    Order[]
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  orderNo         Int           @unique
+  tableId         String?
+  table           DiningTable?  @relation(fields: [tableId], references: [id])
+  type            String        @default("dine_in")
+  status          String        @default("open")
+  waiterId        String?
+  waiter          User?         @relation("WaiterOrders", fields: [waiterId], references: [id])
+  cashierId       String?
+  cashier         User?         @relation("CashierOrders", fields: [cashierId], references: [id])
+  customerNote    String        @default("")
+  discountType    String        @default("none")
+  discountValue   Float         @default(0)
+  promotionId     String?
+  promotion       Promotion?    @relation(fields: [promotionId], references: [id])
+  taxRate         Float         @default(0)
+  serviceRate     Float         @default(0)
+  subtotal        Float         @default(0)
+  discountAmount  Float         @default(0)
+  taxAmount       Float         @default(0)
+  serviceAmount   Float         @default(0)
+  total           Float         @default(0)
+  paidAmount      Float         @default(0)
+  changeAmount    Float         @default(0)
+  paymentMethod   String        @default("")
+  customerName    String        @default("")
+  customerPhone   String        @default("")
+  deliveryAddress String        @default("")
+  fulfillment     String        @default("none")
+  items           OrderItem[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  completedAt     DateTime?
+}
+
+model OrderItem {
+  id             String    @id @default(cuid())
+  orderId        String
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId     String?
+  menuItem       MenuItem? @relation(fields: [menuItemId], references: [id])
+  name           String
+  price          Float
+  qty            Int
+  notes          String    @default("")
+  status         String    @default("pending")
+  kitchenPrinted Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+}
+
+model InboxMessage {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  body      String
+  meta      String   @default("{}")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Printer {
+  id                String  @id @default(cuid())
+  name              String
+  type              String
+  connection        String  @default("network")
+  host              String  @default("127.0.0.1")
+  port              Int     @default(9100)
+  paperWidth        Int     @default(42)
+  cashDrawerEnabled Boolean @default(false)
+  active            Boolean @default(true)
+}
+
+model PrintJob {
+  id        String   @id @default(cuid())
+  printerId String?
+  type      String
+  title     String
+  content   String
+  status    String
+  error     String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  id    String @id
+  value String
+}
+
+model Counter {
+  id    String @id
+  value Int    @default(0)
+}
