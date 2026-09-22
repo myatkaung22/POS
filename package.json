@@ -16,6 +16,7 @@
     "db:import-menu": "tsx --env-file=.env prisma/import-kitchen-menu.ts",
     "smoke": "tsx --env-file=.env scripts/smoke.ts",
     "print-agent": "tsx scripts/print-agent.ts",
+    "print-agent:phone": "node scripts/print-agent.mjs",
     "postinstall": "prisma generate"
   },
   "prisma": {
