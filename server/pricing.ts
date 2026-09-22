@@ -32,9 +32,15 @@ export function roundToDecimals(n: number, decimals: number) {
   return Math.round((Number(n) || 0) * factor) / factor;
 }
 
-export function withBillRounding(pricing: Omit<PricingResult, "roundAmount">, decimals: number): PricingResult {
-  const total = roundToDecimals(pricing.total, decimals);
-  return { ...pricing, total, roundAmount: money(total - pricing.total) };
+/** Half-up to whole currency units: 10.50 → 11, 10.49 → 10. */
+export function roundBillTotal(n: number) {
+  return Math.round(Number(n) || 0);
+}
+
+export function withBillRounding(pricing: Omit<PricingResult, "roundAmount">, _decimals?: number): PricingResult {
+  const raw = money(pricing.total);
+  const total = roundBillTotal(raw);
+  return { ...pricing, total, roundAmount: money(total - raw) };
 }
 
 export type PersonShare<T> = {

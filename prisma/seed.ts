@@ -157,7 +157,7 @@ async function main() {
       { id: "serviceRate", value: "0" },
       { id: "footerNote", value: "Thank you for visiting 4 Corner." },
       { id: "publicUrl", value: process.env.PUBLIC_URL || "http://localhost:5173" },
-      { id: "billDecimals", value: "2" },
+      { id: "billDecimals", value: "0" },
       { id: "dayStartHour", value: "14" },
       { id: "dayEndHour", value: "2" },
     ],

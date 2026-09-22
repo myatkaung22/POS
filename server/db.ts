@@ -13,7 +13,7 @@ export const orderInclude = {
 };
 
 const SETTING_DEFAULTS: Record<string, string> = {
-  billDecimals: "2",
+  billDecimals: "0",
   dayStartHour: "14",
   dayEndHour: "2",
 };

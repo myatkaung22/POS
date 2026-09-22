@@ -122,16 +122,16 @@ export function SettingsPage() {
       {tab === "pricing" && (
         <Card>
           <p className="mb-3 text-sm text-cream-100/60">
-            Tax and service apply to (subtotal − discount). Guest bills round to the decimal places below.
+            Tax and service apply to (subtotal − discount). Final total always rounds to whole ฿ (.5 or more → +1).
           </p>
           <div className="grid gap-3 md:grid-cols-2">
             {field("taxRate", "Tax %")}
             {field("serviceRate", "Service charge %")}
             <label className="block text-sm">
-              <span className="text-sage-400">Bill decimals</span>
+              <span className="text-sage-400">Bill decimals (display)</span>
               <select
                 className="mt-1 w-full rounded-2xl bg-ink-800 px-3 py-2"
-                value={form.billDecimals || "2"}
+                value={form.billDecimals || "0"}
                 onChange={(e) => setForm({ ...form, billDecimals: e.target.value })}
               >
                 <option value="0">0 · whole baht</option>
