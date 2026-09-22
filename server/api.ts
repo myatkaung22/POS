@@ -7,6 +7,7 @@ import { calcPricing, billDecimals, withBillRounding } from "./pricing.ts";
 import { buildInvoicePdf, buildOrderSlipText } from "./invoice.ts";
 import { buildKitchenSlip, buildReceiptSlip, discoverNetworkPrinters, kickCashDrawer, printToPrinter, slipWidth } from "./printer.ts";
 import { listWindowsPrinters, paperWidthForPrinter } from "./windows-print.ts";
+import { agentHeartbeat, claimNextAgentJob, completeAgentJob, printAgentConfigured, printAgentRequired } from "./print-agent.ts";
 import { emitAll, pushInbox } from "./realtime.ts";
 import { PERMISSIONS, assertPermission, hasPermission } from "./permissions.ts";
 import { currencySymbol, formatMoney } from "./currency.ts";
@@ -1254,6 +1255,41 @@ export function registerRoutes(app: Express) {
     res.json({ printers: await discoverNetworkPrinters() });
   }));
 
+  app.get("/api/print-agent/health", printAgentRequired, asyncHandler(async (_req, res) => {
+    const queued = await prisma.printJob.count({ where: { status: "queued", payload: { not: "" } } });
+    res.json({ ...agentHeartbeat(), configured: printAgentConfigured(), queued });
+  }));
+
+  app.get("/api/print-agent/next", printAgentRequired, asyncHandler(async (_req, res) => {
+    const job = await claimNextAgentJob();
+    if (!job) {
+      res.json({ job: null });
+      return;
+    }
+    res.json({
+      job: {
+        id: job.id,
+        host: job.host,
+        port: job.port || 9100,
+        payload: job.payload,
+        title: job.title,
+        type: job.type,
+      },
+    });
+  }));
+
+  app.post("/api/print-agent/jobs/:id/complete", printAgentRequired, asyncHandler(async (req, res) => {
+    const updated = await completeAgentJob(String(req.params.id), {
+      ok: req.body?.ok !== false && !req.body?.error,
+      error: req.body?.error ? String(req.body.error) : undefined,
+    });
+    if (!updated) {
+      res.status(404).json({ error: "Job not found or already finished" });
+      return;
+    }
+    res.json({ job: updated });
+  }));
+
   app.post("/api/printers/network-setup", authRequired, requirePermission("printers"), asyncHandler(async (req, res) => {
     const host = String(req.body.host || "").trim();
     const port = Number(req.body.port || 9100);
@@ -1261,10 +1297,20 @@ export function registerRoutes(app: Express) {
       res.status(400).json({ error: "Enter the printer IP address" });
       return;
     }
+    const viaAgent = Boolean(req.body.viaAgent) || process.env.PRINT_VIA_AGENT === "1";
+    const connection = viaAgent ? "agent" : "network";
     const paperWidth = Number(req.body.paperWidth || 32);
     const roles = [
-      { type: "kitchen", name: "Kitchen Ethernet", cashDrawerEnabled: false },
-      { type: "receipt", name: "Receipt / invoice Ethernet", cashDrawerEnabled: Boolean(req.body.cashDrawer) },
+      {
+        type: "kitchen",
+        name: viaAgent ? "Kitchen via shop agent" : "Kitchen Ethernet",
+        cashDrawerEnabled: false,
+      },
+      {
+        type: "receipt",
+        name: viaAgent ? "Receipt via shop agent" : "Receipt / invoice Ethernet",
+        cashDrawerEnabled: Boolean(req.body.cashDrawer),
+      },
     ];
     const saved = [];
     for (const role of roles) {
@@ -1272,7 +1318,7 @@ export function registerRoutes(app: Express) {
       const data = {
         name: role.name,
         type: role.type,
-        connection: "network",
+        connection,
         host,
         port,
         paperWidth,
@@ -1285,7 +1331,7 @@ export function registerRoutes(app: Express) {
           : await prisma.printer.create({ data })
       );
     }
-    res.json({ printers: saved, host, port });
+    res.json({ printers: saved, host, port, connection });
   }));
 
   app.post("/api/printers/usb-setup", authRequired, requirePermission("printers"), asyncHandler(async (req, res) => {

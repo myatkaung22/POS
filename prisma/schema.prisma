@@ -155,6 +155,9 @@ model PrintJob {
   content   String
   status    String
   error     String   @default("")
+  payload   String   @default("")
+  host      String   @default("")
+  port      Int      @default(9100)
   createdAt DateTime @default(now())
 }
 

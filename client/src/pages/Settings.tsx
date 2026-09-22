@@ -191,13 +191,13 @@ export function SettingsPage() {
               <li>Plug the Ethernet cable into the same router as this POS PC (Wi‑Fi is fine on the PC).</li>
               <li>Power the printer on. USB can stay unplugged.</li>
               <li>Find the printer IP, or tap Scan network. Self-test: hold FEED while switching power on — the slip often prints the IP.</li>
-              <li>Save, then Test print.</li>
+              <li>Save, then Test print. For DigitalOcean hosting, use “Shop agent” so a Mac/PC on Wi‑Fi forwards jobs to the printer.</li>
             </ol>
             <div className="mt-3 flex flex-wrap gap-2">
               <input
                 value={ethernetHost}
                 onChange={(e) => setEthernetHost(e.target.value)}
-                placeholder="Printer IP e.g. 192.168.1.87"
+                placeholder="Printer IP e.g. 192.168.1.200"
                 className="min-w-[180px] flex-1 rounded-2xl bg-ink-800 px-3 py-2 text-sm"
               />
               <button
@@ -237,7 +237,26 @@ export function SettingsPage() {
                 }}
                 className="rounded-2xl bg-gold-500 px-4 py-2 text-sm text-ink-950 disabled:opacity-40"
               >
-                Use Ethernet for kitchen + invoices
+                Direct Ethernet
+              </button>
+              <button
+                type="button"
+                disabled={!ethernetHost.trim()}
+                onClick={async () => {
+                  try {
+                    await api("/api/printers/network-setup", {
+                      method: "POST",
+                      body: JSON.stringify({ host: ethernetHost.trim(), port: 9100, paperWidth: 32, viaAgent: true }),
+                    });
+                    toast("Printer set via shop agent (DigitalOcean)");
+                    void load();
+                  } catch (err) {
+                    toast(err instanceof Error ? err.message : "Could not save printer", "err");
+                  }
+                }}
+                className="rounded-2xl bg-white/10 px-4 py-2 text-sm disabled:opacity-40"
+              >
+                Via shop agent
               </button>
             </div>
             {ethernetFound.length > 0 && (
@@ -384,6 +403,7 @@ function PrinterCard({
         <select value={connection} onChange={(e) => setConnection(e.target.value)} className="rounded-xl bg-ink-900 px-3 py-2">
           <option value="usb">USB / Windows</option>
           <option value="network">Network (9100)</option>
+          <option value="agent">Shop print agent</option>
         </select>
         {connection === "usb" ? (
           <select value={host} onChange={(e) => setHost(e.target.value)} className="rounded-xl bg-ink-900 px-3 py-2">

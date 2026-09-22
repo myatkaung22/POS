@@ -15,6 +15,7 @@
     "db:reset": "prisma db push --force-reset && tsx --env-file=.env prisma/seed.ts",
     "db:import-menu": "tsx --env-file=.env prisma/import-kitchen-menu.ts",
     "smoke": "tsx --env-file=.env scripts/smoke.ts",
+    "print-agent": "tsx scripts/print-agent.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

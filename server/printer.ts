@@ -379,6 +379,10 @@ export async function discoverNetworkPrinters() {
   return found.sort((a, b) => a.host.localeCompare(b.host, undefined, { numeric: true }));
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function printerPayload(printer: { cashDrawerEnabled: boolean }, content: string, opts: { kickDrawer?: boolean; kitchen?: boolean }) {
   return escpos(content, {
     cut: true,
@@ -387,21 +391,69 @@ function printerPayload(printer: { cashDrawerEnabled: boolean }, content: string
   });
 }
 
-async function sendToDevice(
-  printer: { connection: string; host: string; port: number; cashDrawerEnabled: boolean },
-  content: string,
-  opts: { kickDrawer?: boolean; kitchen?: boolean }
+async function sendViaAgent(
+  printer: { id: string; host: string; port: number },
+  opts: { type: string; title: string; content: string; payload: Buffer }
 ) {
+  if (!printer.host) throw new Error("Printer IP is missing for the shop print agent");
+  const job = await prisma.printJob.create({
+    data: {
+      printerId: printer.id,
+      type: opts.type,
+      title: opts.title,
+      content: opts.content,
+      status: "queued",
+      payload: opts.payload.toString("base64"),
+      host: printer.host,
+      port: printer.port || 9100,
+    },
+  });
+
+  const deadline = Date.now() + 25_000;
+  while (Date.now() < deadline) {
+    await sleep(400);
+    const current = await prisma.printJob.findUnique({ where: { id: job.id } });
+    if (!current) throw new Error("Print job disappeared");
+    if (current.status === "printed") return current;
+    if (current.status === "failed") {
+      throw new Error(current.error || "Shop print agent failed");
+    }
+  }
+
+  await prisma.printJob.update({
+    where: { id: job.id },
+    data: {
+      status: "failed",
+      error: "Print agent timeout — keep the shop Mac/PC agent running",
+    },
+  });
+  throw new Error("Print agent timeout — keep the shop Mac/PC agent running");
+}
+
+async function sendToDevice(
+  printer: { id: string; connection: string; host: string; port: number; cashDrawerEnabled: boolean },
+  content: string,
+  opts: { kickDrawer?: boolean; kitchen?: boolean; type: string; title: string }
+): Promise<{ job?: Awaited<ReturnType<typeof prisma.printJob.create>> }> {
   const payload = printerPayload(printer, content, opts);
   if ((printer.connection === "usb" || printer.connection === "windows") && printer.host) {
     await sendWindowsRaw(printer.host, payload);
-    return;
+    return {};
+  }
+  if (printer.connection === "agent" && printer.host) {
+    const job = await sendViaAgent(printer, {
+      type: opts.type,
+      title: opts.title,
+      content,
+      payload,
+    });
+    return { job };
   }
   if (printer.connection === "network" && printer.host) {
     await sendNetwork(printer.host, printer.port, payload);
-    return;
+    return {};
   }
-  throw new Error("Printer is not set to USB or Ethernet");
+  throw new Error("Printer is not set to USB, Ethernet, or shop agent");
 }
 
 export async function printToPrinter(opts: {
@@ -423,30 +475,39 @@ async function dispatchPrint(opts: {
   const preferred = printers.filter((p) => p.type === opts.printerType);
   const fallback = printers.filter((p) => p.type !== opts.printerType);
   const queue = [...preferred, ...fallback];
+  const jobType = opts.kickDrawer && opts.printerType === "receipt" ? "receipt_drawer" : opts.printerType;
 
   let status = queue.length ? "failed" : "simulated";
   let error = queue.length ? "No printer accepted the job" : "";
   let used = preferred[0] || fallback[0] || null;
+  let agentJob: Awaited<ReturnType<typeof prisma.printJob.create>> | undefined;
 
   for (const printer of queue) {
     try {
-      await sendToDevice(printer, opts.content, {
+      const result = await sendToDevice(printer, opts.content, {
         kickDrawer: opts.kickDrawer && opts.printerType === "receipt",
         kitchen: opts.printerType === "kitchen",
+        type: jobType,
+        title: opts.title,
       });
       used = printer;
       status = "printed";
       error = "";
+      agentJob = result.job;
       break;
     } catch (err) {
       error = err instanceof Error ? err.message : "Print failed";
     }
   }
 
+  if (agentJob) {
+    return { job: agentJob, printer: used, status: agentJob.status, content: opts.content };
+  }
+
   const job = await prisma.printJob.create({
     data: {
       printerId: used?.id,
-      type: opts.kickDrawer && opts.printerType === "receipt" ? "receipt_drawer" : opts.printerType,
+      type: jobType,
       title: opts.title,
       content: opts.content,
       status,
@@ -476,25 +537,41 @@ async function pulseCashDrawer() {
     });
     return { job, status: "simulated" };
   }
+  const payload = escpos("", { cut: false, kick: true });
   let status = "simulated";
   let error = "";
+  let agentJob: Awaited<ReturnType<typeof prisma.printJob.create>> | undefined;
   if (printer.connection === "usb" || printer.connection === "windows") {
     try {
-      await sendWindowsRaw(printer.host, escpos("", { cut: false, kick: true }));
+      await sendWindowsRaw(printer.host, payload);
       status = "printed";
+    } catch (err) {
+      status = "failed";
+      error = err instanceof Error ? err.message : "Drawer kick failed";
+    }
+  } else if (printer.connection === "agent") {
+    try {
+      agentJob = await sendViaAgent(printer, {
+        type: "drawer",
+        title: "Cash drawer kick",
+        content: "ESC p pulse to cash drawer",
+        payload,
+      });
+      status = agentJob.status;
     } catch (err) {
       status = "failed";
       error = err instanceof Error ? err.message : "Drawer kick failed";
     }
   } else if (printer.connection === "network") {
     try {
-      await sendNetwork(printer.host, printer.port, escpos("", { cut: false, kick: true }));
+      await sendNetwork(printer.host, printer.port, payload);
       status = "printed";
     } catch (err) {
       status = "failed";
       error = err instanceof Error ? err.message : "Drawer kick failed";
     }
   }
+  if (agentJob) return { job: agentJob, status };
   const job = await prisma.printJob.create({
     data: {
       printerId: printer.id,
