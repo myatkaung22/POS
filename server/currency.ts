@@ -8,8 +8,9 @@ export function currencySymbol(raw?: string | null) {
   return value;
 }
 
-export function formatMoney(n: number, currency?: string | null, ascii = false) {
-  const amount = Number(n || 0).toFixed(2);
+export function formatMoney(n: number, currency?: string | null, ascii = false, decimals = 2) {
+  const places = Math.min(2, Math.max(0, Number.isFinite(Number(decimals)) ? Math.round(Number(decimals)) : 2));
+  const amount = Number(n || 0).toFixed(places);
   const symbol = currencySymbol(currency);
   if (ascii && symbol === DEFAULT_CURRENCY) return `THB ${amount}`;
   return `${symbol}${amount}`;

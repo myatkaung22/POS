@@ -5,6 +5,7 @@ import { api, downloadFile } from "../api";
 import { money, DEFAULT_CURRENCY } from "../types";
 import { useAuth } from "../auth";
 import { toast } from "../components/Toast";
+import { businessDateIso, hourLabel } from "../hours";
 
 type Period = "day" | "month" | "year";
 
@@ -18,6 +19,9 @@ type CategoryReport = {
 type Report = {
   period: Period;
   label: string;
+  start?: string;
+  end?: string;
+  hours?: { startHour: number; endHour: number };
   categoryFilter: string;
   categoryOptions: string[];
   summary: { totalSales: number; orderCount: number; avgTicket: number; itemCount: number };
@@ -28,15 +32,12 @@ type Report = {
   types: { type: string; amount: number }[];
 };
 
-function todayIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 export function ReportsPage() {
   const { settings } = useAuth();
+  const startHour = Number(settings.dayStartHour || 14);
+  const endHour = Number(settings.dayEndHour || 2);
   const [period, setPeriod] = useState<Period>("day");
-  const [date, setDate] = useState(todayIso);
+  const [date, setDate] = useState(() => businessDateIso(new Date(), startHour, endHour));
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [category, setCategory] = useState("");
@@ -83,6 +84,10 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-4">
+      <p className="text-sm text-cream-100/55">
+        Daily close {hourLabel(data.hours?.startHour ?? startHour)} – {hourLabel(data.hours?.endHour ?? endHour)}. Overnight
+        sales before close stay on that sales day.
+      </p>
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex flex-wrap gap-2">
           {(["day", "month", "year"] as const).map((r) => (

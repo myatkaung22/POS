@@ -3,6 +3,8 @@ import os from "node:os";
 import { prisma } from "./db.ts";
 import { formatMoney } from "./currency.ts";
 import { sendWindowsRaw } from "./windows-print.ts";
+import { enqueuePrint } from "./actionQueue.ts";
+import { personShares } from "./pricing.ts";
 
 export const SLIP_WIDTH_80MM = 42;
 export const SLIP_WIDTH_58MM = 32;
@@ -54,15 +56,58 @@ function lineItem(name: string, qty: number, price: number, width: number) {
   return [...nameLines, aligned].join("\n");
 }
 
-export function combineSlipItems<T extends { qty: number; name: string; price: number; notes?: string }>(items: T[]) {
+export function combineSlipItems<T extends { qty: number; name: string; price: number; notes?: string; diner?: string }>(items: T[]) {
   const grouped = new Map<string, T>();
   for (const item of items) {
-    const key = `${item.name}\0${item.price}\0${String(item.notes || "").trim()}`;
+    const key = `${item.name}\0${item.price}\0${String(item.notes || "").trim()}\0${String(item.diner || "").trim().toLowerCase()}`;
     const prev = grouped.get(key);
     if (prev) prev.qty += item.qty;
-    else grouped.set(key, { ...item, notes: String(item.notes || "").trim() });
+    else grouped.set(key, { ...item, notes: String(item.notes || "").trim(), diner: String(item.diner || "").trim() });
   }
   return [...grouped.values()];
+}
+
+export function groupSlipByDiner<T extends { qty: number; name: string; price: number; diner?: string }>(items: T[]) {
+  const buckets = new Map<string, { label: string; items: T[]; subtotal: number }>();
+  for (const item of items) {
+    const label = String(item.diner || "").trim();
+    const key = label.toLowerCase() || "__shared__";
+    const bucket = buckets.get(key) || { label: label || "Shared", items: [], subtotal: 0 };
+    bucket.items.push(item);
+    bucket.subtotal += item.qty * item.price;
+    buckets.set(key, bucket);
+  }
+  return [...buckets.values()].sort((a, b) => {
+    if (a.label === "Shared") return 1;
+    if (b.label === "Shared") return -1;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function appendPricedItems(
+  lines: string[],
+  items: { qty: number; name: string; price: number; notes?: string; diner?: string }[],
+  money: (n: number) => string,
+  w: number,
+  order: { subtotal: number; discountAmount: number; taxAmount: number; serviceAmount: number; total: number }
+) {
+  const combined = combineSlipItems(items);
+  const groups = personShares(combined, order);
+  const split = groups.length > 1 || (groups.length === 1 && groups[0].label !== "Shared");
+  for (const group of groups) {
+    if (split) {
+      lines.push(center(group.label.toUpperCase(), w));
+    }
+    for (const item of group.items) {
+      lines.push(lineItem(item.name, item.qty, item.price, w));
+      if (item.notes) wrap(`  ${item.notes}`, w).forEach((l) => lines.push(l));
+    }
+    if (split) {
+      lines.push(row(`${group.label} total`, money(group.total), w));
+      lines.push("");
+    }
+  }
+  return { groups, split };
 }
 
 export async function slipWidth(printerType: "kitchen" | "receipt") {
@@ -90,24 +135,36 @@ export function buildKitchenSlip(opts: {
   tableLabel: string;
   type: string;
   note: string;
-  items: { qty: number; name: string; notes: string }[];
+  items: { qty: number; name: string; notes: string; diner?: string }[];
   width?: number;
+  addon?: boolean;
 }) {
   const w = opts.width ?? SLIP_WIDTH_80MM;
   const lines = [
     rule(w, "*"),
-    center("KITCHEN SLIP", w),
+    center(opts.addon ? "KITCHEN  ·  NEW ITEMS" : "KITCHEN SLIP", w),
     center(opts.restaurant, w),
     rule(w, "*"),
     `#${opts.orderNo}  ${opts.tableLabel}`.slice(0, w),
     `${opts.type.replace("_", " ").toUpperCase()}  ${new Date().toLocaleString()}`.slice(0, w),
-    rule(w),
   ];
-  for (const item of opts.items) {
-    const qty = String(item.qty).padStart(2, " ");
-    wrap(`${qty}  ${item.name.toUpperCase()}`, w).forEach((l) => lines.push(l));
-    if (item.notes) wrap(`    ** ${item.notes}`, w).forEach((l) => lines.push(l));
-    lines.push("");
+  if (opts.addon) {
+    lines.push(center("ADD-ON  ·  PRINT NEW ONLY", w));
+  }
+  lines.push(rule(w));
+  const kitchenGroups = groupSlipByDiner(opts.items.map((item) => ({ ...item, price: 0 })));
+  const splitKitchen = kitchenGroups.length > 1 || (kitchenGroups.length === 1 && kitchenGroups[0].label !== "Shared");
+  for (const group of kitchenGroups) {
+    if (splitKitchen) {
+      lines.push(center(group.label.toUpperCase(), w));
+    }
+    for (const item of group.items) {
+      const qty = String(item.qty).padStart(2, " ");
+      wrap(`${qty}  ${item.name.toUpperCase()}`, w).forEach((l) => lines.push(l));
+      if (!splitKitchen && item.diner) wrap(`    @ ${item.diner}`, w).forEach((l) => lines.push(l));
+      if (item.notes) wrap(`    ** ${item.notes}`, w).forEach((l) => lines.push(l));
+      lines.push("");
+    }
   }
   if (opts.note) {
     lines.push(rule(w));
@@ -128,18 +185,20 @@ export function buildBillSlip(opts: {
   guest?: string;
   server?: string;
   currency: string;
-  items: { qty: number; name: string; price: number; notes?: string }[];
+  items: { qty: number; name: string; price: number; notes?: string; diner?: string }[];
   subtotal: number;
   discountAmount: number;
   taxAmount: number;
   taxRate: number;
   serviceAmount: number;
   total: number;
+  roundAmount?: number;
   footer: string;
   width?: number;
+  decimals?: number;
 }) {
   const w = opts.width ?? SLIP_WIDTH_80MM;
-  const money = (n: number) => formatMoney(n, opts.currency, true);
+  const money = (n: number) => formatMoney(n, opts.currency, true, opts.decimals ?? 2);
   const lines = [
     center(opts.restaurant, w),
     ...wrap(opts.address, w).map((l) => center(l, w)),
@@ -153,16 +212,21 @@ export function buildBillSlip(opts: {
   if (opts.guest) wrap(`Guest: ${opts.guest}`, w).forEach((l) => lines.push(l));
   if (opts.server) lines.push(`Server: ${opts.server}`);
   lines.push(new Date().toLocaleString(), rule(w));
-  for (const item of combineSlipItems(opts.items)) {
-    lines.push(lineItem(item.name, item.qty, item.price, w));
-    if (item.notes) wrap(`  ${item.notes}`, w).forEach((l) => lines.push(l));
-  }
+  const people = appendPricedItems(lines, opts.items, money, w, opts);
   lines.push(rule(w));
   lines.push(row("Subtotal", money(opts.subtotal), w));
   if (opts.discountAmount) lines.push(row("Discount", `-${money(opts.discountAmount)}`, w));
   if (opts.taxAmount) lines.push(row(`Tax ${opts.taxRate}%`, money(opts.taxAmount), w));
   if (opts.serviceAmount) lines.push(row("Service", money(opts.serviceAmount), w));
+  if (opts.roundAmount) lines.push(row(opts.roundAmount > 0 ? "Round up" : "Round down", money(opts.roundAmount), w));
   lines.push(row("TOTAL DUE", money(opts.total), w));
+  if (people.split) {
+    lines.push(rule(w));
+    lines.push(center("EACH PERSON", w));
+    for (const group of people.groups) {
+      lines.push(row(group.label, money(group.total), w));
+    }
+  }
   lines.push(rule(w));
   wrap(opts.footer || "Please pay at cashier", w).map((l) => center(l, w)).forEach((l) => lines.push(l));
   lines.push("");
@@ -177,7 +241,7 @@ export function buildReceiptSlip(opts: {
   tableLabel: string;
   cashier: string;
   currency: string;
-  items: { qty: number; name: string; price: number }[];
+  items: { qty: number; name: string; price: number; notes?: string; diner?: string }[];
   subtotal: number;
   discountAmount: number;
   taxAmount: number;
@@ -187,11 +251,14 @@ export function buildReceiptSlip(opts: {
   paidAmount: number;
   changeAmount: number;
   paymentMethod: string;
+  payments?: { method: string; amount: number }[];
+  roundAmount?: number;
   footer: string;
   width?: number;
+  decimals?: number;
 }) {
   const w = opts.width ?? SLIP_WIDTH_80MM;
-  const money = (n: number) => formatMoney(n, opts.currency, true);
+  const money = (n: number) => formatMoney(n, opts.currency, true, opts.decimals ?? 2);
   const lines = [
     center(opts.restaurant, w),
     ...wrap(opts.address, w).map((l) => center(l, w)),
@@ -204,16 +271,28 @@ export function buildReceiptSlip(opts: {
     new Date().toLocaleString(),
     rule(w),
   ];
-  for (const item of combineSlipItems(opts.items)) {
-    lines.push(lineItem(item.name, item.qty, item.price, w));
-  }
+  const people = appendPricedItems(lines, opts.items, money, w, opts);
   lines.push(rule(w));
   lines.push(row("Subtotal", money(opts.subtotal), w));
   if (opts.discountAmount) lines.push(row("Discount", `-${money(opts.discountAmount)}`, w));
   if (opts.taxAmount) lines.push(row(opts.taxRate ? `Tax ${opts.taxRate}%` : "Tax", money(opts.taxAmount), w));
   if (opts.serviceAmount) lines.push(row("Service", money(opts.serviceAmount), w));
+  if (opts.roundAmount) lines.push(row(opts.roundAmount > 0 ? "Round up" : "Round down", money(opts.roundAmount), w));
   lines.push(row("TOTAL", money(opts.total), w));
-  lines.push(row((opts.paymentMethod || "PAID").toUpperCase(), money(opts.paidAmount), w));
+  if (people.split) {
+    lines.push(rule(w));
+    lines.push(center("EACH PERSON", w));
+    for (const group of people.groups) {
+      lines.push(row(group.label, money(group.total), w));
+    }
+  }
+  if (opts.payments?.length) {
+    for (const pay of opts.payments) {
+      lines.push(row((pay.method || "paid").toUpperCase(), money(pay.amount), w));
+    }
+  } else {
+    lines.push(row((opts.paymentMethod || "PAID").toUpperCase(), money(opts.paidAmount), w));
+  }
   if (opts.changeAmount) lines.push(row("Change", money(opts.changeAmount), w));
   lines.push(rule(w));
   wrap(opts.footer || "Thank you", w).map((l) => center(l, w)).forEach((l) => lines.push(l));
@@ -331,6 +410,15 @@ export async function printToPrinter(opts: {
   content: string;
   kickDrawer?: boolean;
 }) {
+  return enqueuePrint(() => dispatchPrint(opts));
+}
+
+async function dispatchPrint(opts: {
+  printerType: "kitchen" | "receipt";
+  title: string;
+  content: string;
+  kickDrawer?: boolean;
+}) {
   const printers = await prisma.printer.findMany({ where: { active: true } });
   const preferred = printers.filter((p) => p.type === opts.printerType);
   const fallback = printers.filter((p) => p.type !== opts.printerType);
@@ -370,6 +458,10 @@ export async function printToPrinter(opts: {
 }
 
 export async function kickCashDrawer() {
+  return enqueuePrint(() => pulseCashDrawer());
+}
+
+async function pulseCashDrawer() {
   const printer = await prisma.printer.findFirst({
     where: { type: "receipt", active: true, cashDrawerEnabled: true },
   });

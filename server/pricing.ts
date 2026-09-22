@@ -13,10 +13,79 @@ export type PricingResult = {
   taxAmount: number;
   serviceAmount: number;
   total: number;
+  roundAmount: number;
 };
 
 function money(n: number) {
   return Math.round(n * 100) / 100;
+}
+
+export function billDecimals(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 2;
+  return Math.min(2, Math.max(0, Math.round(n)));
+}
+
+export function roundToDecimals(n: number, decimals: number) {
+  const places = billDecimals(decimals);
+  const factor = 10 ** places;
+  return Math.round((Number(n) || 0) * factor) / factor;
+}
+
+export function withBillRounding(pricing: Omit<PricingResult, "roundAmount">, decimals: number): PricingResult {
+  const total = roundToDecimals(pricing.total, decimals);
+  return { ...pricing, total, roundAmount: money(total - pricing.total) };
+}
+
+export type PersonShare<T> = {
+  label: string;
+  items: T[];
+  subtotal: number;
+  total: number;
+};
+
+export function personShares<T extends { diner?: string; qty: number; price: number; status?: string }>(
+  items: T[],
+  order: {
+    subtotal?: number;
+    discountAmount?: number;
+    taxAmount?: number;
+    serviceAmount?: number;
+    total?: number;
+  }
+): PersonShare<T>[] {
+  const buckets = new Map<string, { label: string; items: T[]; subtotal: number }>();
+  for (const item of items) {
+    if (item.status === "cancelled") continue;
+    const label = String(item.diner || "").trim() || "Shared";
+    const key = label.toLowerCase();
+    const bucket = buckets.get(key) || { label, items: [], subtotal: 0 };
+    bucket.items.push(item);
+    bucket.subtotal += item.qty * item.price;
+    buckets.set(key, bucket);
+  }
+  const groups = [...buckets.values()].sort((a, b) => {
+    if (a.label === "Shared") return 1;
+    if (b.label === "Shared") return -1;
+    return a.label.localeCompare(b.label);
+  });
+  const itemSum = groups.reduce((sum, group) => sum + group.subtotal, 0);
+  const base = itemSum > 0 ? itemSum : Number(order.subtotal || 0) || 1;
+  const parts = groups.map((group) => {
+    const ratio = group.subtotal / base;
+    const discount = money(Number(order.discountAmount || 0) * ratio);
+    const tax = money(Number(order.taxAmount || 0) * ratio);
+    const service = money(Number(order.serviceAmount || 0) * ratio);
+    return {
+      label: group.label,
+      items: group.items,
+      subtotal: money(group.subtotal),
+      total: money(group.subtotal - discount + tax + service),
+    };
+  });
+  const drift = money(Number(order.total || 0) - parts.reduce((sum, part) => sum + part.total, 0));
+  if (parts.length && drift !== 0) parts[parts.length - 1].total = money(parts[parts.length - 1].total + drift);
+  return parts;
 }
 
 export function calcPricing(input: PricingInput): PricingResult {
@@ -51,5 +120,5 @@ export function calcPricing(input: PricingInput): PricingResult {
   const serviceAmount = money(taxable * ((input.serviceRate || 0) / 100));
   const total = money(taxable + taxAmount + serviceAmount);
 
-  return { subtotal, discountAmount, taxAmount, serviceAmount, total };
+  return { subtotal, discountAmount, taxAmount, serviceAmount, total, roundAmount: 0 };
 }

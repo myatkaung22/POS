@@ -16,6 +16,7 @@ import { OrdersPage } from "./pages/Orders";
 import { SettingsPage } from "./pages/Settings";
 import { QRMenuPage } from "./pages/QRMenu";
 import { DispatchPage } from "./pages/Dispatch";
+import { ClockPage } from "./pages/Clock";
 
 function HomeRedirect() {
   const { user, can } = useAuth();
@@ -75,6 +76,9 @@ export function App() {
                 </Route>
                 <Route element={<Perm permission="orders" />}>
                   <Route path="/orders" element={<OrdersPage />} />
+                </Route>
+                <Route element={<Perm permission="clock" />}>
+                  <Route path="/clock" element={<ClockPage />} />
                 </Route>
                 <Route element={<Perm permission="settings" />}>
                   <Route path="/settings" element={<SettingsPage />} />

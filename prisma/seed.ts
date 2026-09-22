@@ -157,6 +157,9 @@ async function main() {
       { id: "serviceRate", value: "0" },
       { id: "footerNote", value: "Thank you for visiting 4 Corner." },
       { id: "publicUrl", value: process.env.PUBLIC_URL || "http://localhost:5173" },
+      { id: "billDecimals", value: "2" },
+      { id: "dayStartHour", value: "14" },
+      { id: "dayEndHour", value: "2" },
     ],
   });
 
@@ -170,13 +173,14 @@ async function main() {
     for (let i = 0; i < count; i++) {
       const when = new Date();
       when.setDate(when.getDate() - d);
-      when.setHours(11 + (i * 2), 10 + i, 0, 0);
+      when.setHours(15 + (i % 8), 10 + i, 0, 0);
       const item = menuItems[i % menuItems.length];
       const extra = menuItems[(i + 3) % menuItems.length];
       const qty = 1 + (i % 3);
       const subtotal = Math.round((item.price * qty + extra.price) * 100) / 100;
       const taxAmount = Math.round(subtotal * 0.07 * 100) / 100;
       const total = Math.round((subtotal + taxAmount) * 100) / 100;
+      const paymentMethod = i % 3 === 0 ? "cash" : i % 3 === 1 ? "card" : "qr";
       await prisma.order.create({
         data: {
           orderNo: orderNo++,
@@ -190,7 +194,7 @@ async function main() {
           taxAmount,
           total,
           paidAmount: total,
-          paymentMethod: i % 3 === 0 ? "cash" : i % 3 === 1 ? "card" : "qr",
+          paymentMethod,
           completedAt: when,
           createdAt: when,
           items: {
@@ -198,6 +202,9 @@ async function main() {
               { menuItemId: item.id, name: item.name, price: item.price, qty, status: "ready" },
               { menuItemId: extra.id, name: extra.name, price: extra.price, qty: 1, status: "ready" },
             ],
+          },
+          payments: {
+            create: [{ method: paymentMethod, amount: total }],
           },
         },
       });

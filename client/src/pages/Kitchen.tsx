@@ -4,13 +4,15 @@ import { getSocket } from "../socket";
 import type { Order } from "../types";
 import { toast } from "../components/Toast";
 import { printSlip } from "../printSlip";
+import { useActionQueue } from "../actionQueue";
 
 export function KitchenPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const { busy, run } = useActionQueue();
 
   async function load() {
     const rows = await api<Order[]>("/api/orders?kitchen=1");
-    setOrders(rows.filter((o) => o.items.some((i) => ["sent", "preparing"].includes(i.status))));
+    setOrders(rows.filter((o) => o.items.some((i) => ["sent", "preparing", "ready"].includes(i.status))));
   }
 
   useEffect(() => {
@@ -33,7 +35,7 @@ export function KitchenPage() {
       method: "POST",
       body: JSON.stringify({ itemIds, status }),
     });
-    toast(status === "ready" ? "Ticket ready" : "Preparing");
+    toast(status === "ready" ? "Ready — waiter marks Served on POS" : "Preparing");
   }
 
   return (
@@ -71,6 +73,7 @@ export function KitchenPage() {
                 <li key={item.id} className="flex justify-between rounded-2xl bg-ink-800 px-3 py-2">
                   <span>
                     <b>{item.qty}×</b> {item.name}
+                    {item.diner ? <div className="text-xs text-sky-300">@{item.diner}</div> : null}
                     {item.notes && <div className="text-xs text-gold-400">{item.notes}</div>}
                   </span>
                   <span className="text-xs uppercase text-sage-400">{item.status}</span>
@@ -92,21 +95,20 @@ export function KitchenPage() {
               Ready
             </button>
             <button
-              onClick={async () => {
-                try {
+              disabled={busy(`kitchen-print:${order.id}`)}
+              onClick={() =>
+                void run(`kitchen-print:${order.id}`, `Printing kitchen #${order.orderNo}`, async () => {
                   const data = await api<{ content: string; print?: { status: string } }>(
                     `/api/orders/${order.id}/print-kitchen`,
                     { method: "POST" }
                   );
-                  if (data.print?.status !== "printed") printSlip(`Kitchen #${order.orderNo}`, data.content);
+                  if (data.print?.status !== "printed") void printSlip(`Kitchen #${order.orderNo}`, data.content);
                   toast(data.print?.status === "printed" ? "Kitchen slip printed" : "Kitchen slip ready to print");
-                } catch (err) {
-                  toast(err instanceof Error ? err.message : "Print failed", "err");
-                }
-              }}
-              className="rounded-2xl bg-white/5 py-2"
+                })
+              }
+              className="rounded-2xl bg-white/5 py-2 disabled:opacity-40"
             >
-              Print
+              {busy(`kitchen-print:${order.id}`) ? "Printing…" : "Print"}
             </button>
           </div>
         </article>

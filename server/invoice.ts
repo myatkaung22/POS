@@ -1,10 +1,12 @@
 import PDFDocument from "pdfkit";
-import type { Order, OrderItem, DiningTable, User, Promotion } from "@prisma/client";
+import type { Order, OrderItem, OrderPayment, DiningTable, User, Promotion } from "@prisma/client";
 import { currencySymbol } from "./currency.ts";
+import { billDecimals } from "./pricing.ts";
 import { buildBillSlip, buildReceiptSlip, SLIP_WIDTH_80MM } from "./printer.ts";
 
 type FullOrder = Order & {
   items: OrderItem[];
+  payments?: OrderPayment[];
   table: DiningTable | null;
   waiter: Pick<User, "id" | "name" | "role"> | null;
   cashier: Pick<User, "id" | "name" | "role"> | null;
@@ -23,7 +25,8 @@ function tableLabel(order: FullOrder) {
 export function buildOrderSlipText(order: FullOrder, settings: Record<string, string>, width = SLIP_WIDTH_80MM) {
   const items = order.items
     .filter((i) => i.status !== "cancelled")
-    .map((i) => ({ qty: i.qty, name: i.name, price: i.price, notes: i.notes }));
+    .map((i) => ({ qty: i.qty, name: i.name, price: i.price, notes: i.notes, diner: i.diner }));
+  const decimals = billDecimals(settings.billDecimals);
   const paid = order.paidAmount > 0 || ["paid", "completed"].includes(order.status);
   if (paid) {
     return buildReceiptSlip({
@@ -44,8 +47,11 @@ export function buildOrderSlipText(order: FullOrder, settings: Record<string, st
       paidAmount: order.paidAmount || order.total,
       changeAmount: order.changeAmount,
       paymentMethod: order.paymentMethod,
+      payments: order.payments,
+      roundAmount: order.roundAmount,
       footer: settings.footerNote || "Thank you for visiting 4 Corner.",
       width,
+      decimals,
     });
   }
   return buildBillSlip({
@@ -65,8 +71,10 @@ export function buildOrderSlipText(order: FullOrder, settings: Record<string, st
     taxRate: order.taxRate,
     serviceAmount: order.serviceAmount,
     total: order.total,
+    roundAmount: order.roundAmount,
     footer: settings.footerNote || "Please pay at cashier",
     width,
+    decimals,
   });
 }
 

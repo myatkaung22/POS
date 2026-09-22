@@ -8,6 +8,7 @@ import {
   LogOut,
   Settings2,
   Table2,
+  Timer,
   UtensilsCrossed,
   BarChart3,
   Sparkles,
@@ -16,6 +17,8 @@ import { useAuth } from "../auth";
 import { useEffect, useState } from "react";
 import { getSocket } from "../socket";
 import type { InboxMessage } from "../types";
+import { api } from "../api";
+import { toast } from "./Toast";
 import { QrAlertHost, useQrAlerts } from "../alerts";
 
 const links = [
@@ -27,6 +30,7 @@ const links = [
   { to: "/menu", label: "Menu", icon: LayoutGrid, perm: "menu" },
   { to: "/inbox", label: "Inbox", icon: Bell, perm: "inbox" },
   { to: "/reports", label: "Reports", icon: BarChart3, perm: "reports" },
+  { to: "/clock", label: "Clock", icon: Timer, perm: "clock" },
   { to: "/ask", label: "Ask (Beta)", icon: Sparkles, perm: "reports" },
   { to: "/settings", label: "Settings", icon: Settings2, perm: "settings" },
 ];
@@ -37,6 +41,7 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [clock, setClock] = useState(() => new Date());
+  const [shift, setShift] = useState<{ id: string; clockIn: string } | null>(null);
   const qrWaiting = alerts.length;
   const nav = links.filter((l) => can(l.perm));
 
@@ -44,6 +49,12 @@ export function Layout() {
     const t = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    void api<{ shift: { id: string; clockIn: string } | null }>("/api/time/me")
+      .then((data) => setShift(data.shift))
+      .catch(() => setShift(null));
+  }, [user?.id]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -125,6 +136,33 @@ export function Layout() {
               <div className="tabular-nums text-cream-50">{clock.toLocaleTimeString()}</div>
               <div className="text-xs text-cream-100/45">{clock.toLocaleDateString()}</div>
             </div>
+            {can("clock") && (
+              <button
+                onClick={async () => {
+                  try {
+                    if (shift) {
+                      await api("/api/time/clock-out", { method: "POST", body: "{}" });
+                      setShift(null);
+                      toast("Clocked out");
+                    } else {
+                      const data = await api<{ shift: { id: string; clockIn: string } }>("/api/time/clock-in", {
+                        method: "POST",
+                        body: "{}",
+                      });
+                      setShift(data.shift);
+                      toast("Clocked in");
+                    }
+                  } catch (err) {
+                    toast(err instanceof Error ? err.message : "Clock failed", "err");
+                  }
+                }}
+                className={`rounded-2xl px-2 py-1.5 text-[11px] sm:px-3 sm:text-sm ${
+                  shift ? "bg-sage-500/20 text-sage-400" : "border border-white/10 text-cream-100/70"
+                }`}
+              >
+                {shift ? "Clock out" : "Clock in"}
+              </button>
+            )}
             <div className="max-w-[38vw] rounded-2xl border border-white/10 bg-ink-800 px-2 py-1.5 sm:max-w-none sm:px-3 sm:py-2">
               <div className="truncate text-xs leading-tight sm:text-sm">{user?.name}</div>
               <div className="text-[10px] tracking-[0.16em] text-gold-400 uppercase">{user?.role}</div>
@@ -184,6 +222,7 @@ function headerTitle(path: string) {
   if (path.startsWith("/reports")) return "Reports";
   if (path.startsWith("/ask")) return "Ask (Beta)";
   if (path.startsWith("/orders")) return "History";
+  if (path.startsWith("/clock")) return "Clock";
   if (path.startsWith("/settings")) return "Settings";
   return "POS";
 }

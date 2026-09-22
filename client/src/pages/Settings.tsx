@@ -2,7 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { toast } from "../components/Toast";
+import { hourLabel } from "../hours";
 import type { Printer, PrintJob, Promotion, AuthUser } from "../types";
+import { runAction } from "../actionQueue";
 
 export function SettingsPage() {
   const { settings, refresh, can } = useAuth();
@@ -76,7 +78,38 @@ export function SettingsPage() {
             {field("currency", "Currency symbol (฿)")}
             {field("publicUrl", "Public URL for QR (LAN address phones can open)")}
             {field("footerNote", "Receipt footer")}
+            <label className="block text-sm">
+              <span className="text-sage-400">Sales day starts</span>
+              <select
+                className="mt-1 w-full rounded-2xl bg-ink-800 px-3 py-2"
+                value={form.dayStartHour || "14"}
+                onChange={(e) => setForm({ ...form, dayStartHour: e.target.value })}
+              >
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {hourLabel(h)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="text-sage-400">Daily sales close</span>
+              <select
+                className="mt-1 w-full rounded-2xl bg-ink-800 px-3 py-2"
+                value={form.dayEndHour || "2"}
+                onChange={(e) => setForm({ ...form, dayEndHour: e.target.value })}
+              >
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {hourLabel(h)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
+          <p className="mt-3 text-sm text-cream-100/55">
+            Reports use this window (default 2:00 PM – 2:00 AM). Overnight sales before close stay on the previous sales day.
+          </p>
           <Save
             onClick={async () => {
               await api("/api/settings", { method: "PUT", body: JSON.stringify(form) });
@@ -89,11 +122,23 @@ export function SettingsPage() {
       {tab === "pricing" && (
         <Card>
           <p className="mb-3 text-sm text-cream-100/60">
-            Tax and service apply to (subtotal − discount). Promotions can replace a custom discount on a ticket.
+            Tax and service apply to (subtotal − discount). Guest bills round to the decimal places below.
           </p>
           <div className="grid gap-3 md:grid-cols-2">
             {field("taxRate", "Tax %")}
             {field("serviceRate", "Service charge %")}
+            <label className="block text-sm">
+              <span className="text-sage-400">Bill decimals</span>
+              <select
+                className="mt-1 w-full rounded-2xl bg-ink-800 px-3 py-2"
+                value={form.billDecimals || "2"}
+                onChange={(e) => setForm({ ...form, billDecimals: e.target.value })}
+              >
+                <option value="0">0 · whole baht</option>
+                <option value="1">1 · one decimal</option>
+                <option value="2">2 · satang</option>
+              </select>
+            </label>
           </div>
           <Save
             onClick={async () => {
@@ -387,18 +432,22 @@ function PrinterCard({
         </button>
         <button
           type="button"
-          onClick={async () => {
-            try {
-              const r = await api<{ status: string }>(`/api/printers/${printer.id}/test`, { method: "POST" });
-              toast(r.status === "printed" ? "Test slip printed" : `Test ${r.status}`, r.status === "printed" ? "ok" : "info");
-              onSaved();
-            } catch (err) {
-              toast(err instanceof Error ? err.message : "Test failed", "err");
-            }
-          }}
-          className="rounded-xl bg-gold-500 px-3 py-1 text-ink-950"
+          disabled={busy}
+          onClick={() =>
+            void runAction(`printer-test:${printer.id}`, `Test print · ${printer.name}`, async () => {
+              setBusy(true);
+              try {
+                const r = await api<{ status: string }>(`/api/printers/${printer.id}/test`, { method: "POST" });
+                toast(r.status === "printed" ? "Test slip printed" : `Test ${r.status}`, r.status === "printed" ? "ok" : "info");
+                onSaved();
+              } finally {
+                setBusy(false);
+              }
+            })
+          }
+          className="rounded-xl bg-gold-500 px-3 py-1 text-ink-950 disabled:opacity-40"
         >
-          Test print
+          {busy ? "Printing…" : "Test print"}
         </button>
       </div>
     </div>

@@ -3,11 +3,11 @@ import { useParams } from "react-router-dom";
 import { Receipt, Search, UtensilsCrossed, X } from "lucide-react";
 import { api } from "../api";
 import { getSocket } from "../socket";
-import { money, type Category, type DiningTable, type Order, type SettingsMap, DEFAULT_CURRENCY } from "../types";
+import { money, type Category, type DiningTable, type Order, type SettingsMap, DEFAULT_CURRENCY, personBills } from "../types";
 import { toast } from "../components/Toast";
 import { DishPhoto } from "../components/DishPhoto";
 
-type CartLine = { menuItemId: string; name: string; price: number; qty: number; notes: string; emoji: string };
+type CartLine = { menuItemId: string; name: string; price: number; qty: number; notes: string; emoji: string; diner: string };
 type GuestTab = "menu" | "bill";
 
 function guestStatus(status: string) {
@@ -20,6 +20,53 @@ function guestStatus(status: string) {
   return status;
 }
 
+function dinerKey(token: string) {
+  return `omni-qr-diner-${token}`;
+}
+
+function GuestNameBar({
+  value,
+  names,
+  onChange,
+}: {
+  value: string;
+  names: string[];
+  onChange: (value: string) => void;
+}) {
+  const active = value.trim().toLowerCase();
+  return (
+    <div className="mt-3">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Your name (optional) — see what you owe"
+        className="w-full rounded-2xl border-0 bg-white py-2.5 px-3 text-sm text-ink-950 outline-none"
+      />
+      {(names.length > 0 || value.trim()) && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className={`rounded-full px-3 py-1 text-xs ${!active ? "bg-gold-500 text-ink-950" : "bg-white/15 text-white"}`}
+          >
+            Table
+          </button>
+          {names.map((name) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onChange(name)}
+              className={`rounded-full px-3 py-1 text-xs ${active === name.toLowerCase() ? "bg-gold-500 text-ink-950" : "bg-white/15 text-white"}`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function QRMenuPage() {
   const { token } = useParams();
   const [table, setTable] = useState<DiningTable | null>(null);
@@ -28,6 +75,7 @@ export function QRMenuPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [note, setNote] = useState("");
+  const [diner, setDiner] = useState("");
   const [cat, setCat] = useState("all");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -46,6 +94,19 @@ export function QRMenuPage() {
   useEffect(() => {
     void load().catch(() => toast("This table QR is invalid", "err"));
   }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const saved = localStorage.getItem(dinerKey(token)) || "";
+    if (saved) setDiner(saved);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const name = diner.trim();
+    if (name) localStorage.setItem(dinerKey(token), name);
+    else localStorage.removeItem(dinerKey(token));
+  }, [diner, token]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -76,7 +137,15 @@ export function QRMenuPage() {
   const total = cart.reduce((s, l) => s + l.price * l.qty, 0);
   const cartCount = cart.reduce((n, l) => n + l.qty, 0);
   const currency = settings.currency || DEFAULT_CURRENCY;
+  const decimals = Math.min(2, Math.max(0, Number(settings.billDecimals ?? 2) || 0));
+  const fmt = (n: number) => money(n, currency, decimals);
   const billItems = (order?.items || []).filter((i) => i.status !== "cancelled");
+  const billPeople = order ? personBills(billItems, order) : [];
+  const splitDiners = billPeople.length > 1 || (billPeople.length === 1 && billPeople[0].label !== "Shared");
+  const dinerNames = [...new Set(billItems.map((i) => String(i.diner || "").trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b)
+  );
+  const myBill = diner.trim() ? billPeople.find((g) => g.label.toLowerCase() === diner.trim().toLowerCase()) : undefined;
   const billed = order?.status === "billed";
 
   async function submit() {
@@ -85,7 +154,8 @@ export function QRMenuPage() {
       method: "POST",
       body: JSON.stringify({
         note,
-        items: cart.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty, notes: l.notes })),
+        diner,
+        items: cart.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty, notes: l.notes, diner: l.diner || diner })),
       }),
     });
     setOrder(next);
@@ -111,6 +181,13 @@ export function QRMenuPage() {
         <div className="mt-1 text-[10px] font-semibold tracking-[0.22em] text-white/40 uppercase">OmniMind POS</div>
         <div className="display mt-2 text-2xl">{table.name}</div>
         <div className="text-sm text-white/55">Table {table.number} · order from your phone</div>
+        <GuestNameBar value={diner} names={dinerNames} onChange={setDiner} />
+        {tab === "bill" && myBill && (
+          <div className="mt-3 flex items-baseline justify-between rounded-2xl bg-gold-500 px-3 py-2 text-ink-950">
+            <span className="text-sm">{myBill.label} owes</span>
+            <span className="display text-2xl leading-none">{fmt(myBill.total)}</span>
+          </div>
+        )}
         {tab === "menu" && (
           <>
             <label className="relative mt-3 block text-ink-950">
@@ -174,10 +251,18 @@ export function QRMenuPage() {
               </div>
               <button
                 onClick={() => {
+                  const tag = diner.trim();
                   setCart((prev) => {
-                    const found = prev.find((l) => l.menuItemId === item.id);
-                    if (found) return prev.map((l) => (l.menuItemId === item.id ? { ...l, qty: l.qty + 1 } : l));
-                    return [...prev, { menuItemId: item.id, name: item.name, price: item.price, qty: 1, notes: "", emoji: item.emoji }];
+                    const found = prev.find((l) => l.menuItemId === item.id && (l.diner || "") === tag);
+                    if (found) {
+                      return prev.map((l) =>
+                        l.menuItemId === item.id && (l.diner || "") === tag ? { ...l, qty: l.qty + 1 } : l
+                      );
+                    }
+                    return [
+                      ...prev,
+                      { menuItemId: item.id, name: item.name, price: item.price, qty: 1, notes: "", emoji: item.emoji, diner: tag },
+                    ];
                   });
                 }}
                 className="self-center rounded-full bg-ink-900 px-3 py-1 text-cream-50"
@@ -193,65 +278,121 @@ export function QRMenuPage() {
         <div className="space-y-3 px-4 pt-3 pb-36">
           {!order || billItems.length === 0 ? (
             <div className="rounded-3xl bg-white p-6 text-center text-sm opacity-60">
-              No bill yet. Add dishes from the menu and send them to the restaurant.
+              No bill yet. Add your name, then send dishes from the menu.
               {cartCount > 0 && <div className="mt-2 font-medium text-ink-900">{cartCount} item{cartCount === 1 ? "" : "s"} in your cart, not sent.</div>}
             </div>
           ) : (
-            <div className="rounded-3xl bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[10px] tracking-[0.18em] uppercase opacity-45">Table {table.number}</div>
-                  <div className="display text-2xl">Total bill</div>
-                  <div className="text-sm opacity-55">Ticket #{order.orderNo}{billed ? " · please pay at the counter" : ""}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] tracking-wide uppercase opacity-45">Due</div>
-                  <div className="display text-2xl">{money(order.total, currency)}</div>
+            <>
+              <div className="rounded-3xl bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] tracking-[0.18em] uppercase opacity-45">Table {table.number}</div>
+                    <div className="display text-2xl">Total bill</div>
+                    <div className="text-sm opacity-55">Ticket #{order.orderNo}{billed ? " · please pay at the counter" : ""}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] tracking-wide uppercase opacity-45">Table due</div>
+                    <div className="display text-2xl">{fmt(order.total)}</div>
+                  </div>
                 </div>
               </div>
-              <div className="mt-4 divide-y divide-ink-900/10">
-                {[...order.items]
-                  .sort((a, b) => Number(a.status === "served" || a.status === "cancelled") - Number(b.status === "served" || b.status === "cancelled"))
-                  .map((i) => (
-                  <div key={i.id} className={`flex items-start justify-between gap-3 py-2.5 text-sm ${i.status === "cancelled" ? "opacity-40 line-through" : ""}`}>
-                    <div>
-                      <div>
-                        {i.qty}× {i.name}
-                      </div>
-                      {i.notes && <div className="text-xs opacity-50">{i.notes}</div>}
-                      <div className="text-[11px] tracking-wide uppercase opacity-45">{guestStatus(i.status)}</div>
+              {splitDiners ? (
+                <div className="rounded-3xl bg-ink-900 p-4 text-cream-50 shadow-sm">
+                  <div className="text-[10px] tracking-[0.18em] uppercase text-white/45">Each person</div>
+                  <div className="mt-2 space-y-2">
+                    {billPeople.map((group) => (
+                      <button
+                        type="button"
+                        key={group.label}
+                        onClick={() => setDiner(group.label === "Shared" ? "" : group.label)}
+                        className={`flex w-full items-baseline justify-between rounded-2xl px-3 py-2 text-left ${
+                          myBill?.label === group.label ? "bg-gold-500 text-ink-950" : "bg-white/8"
+                        }`}
+                      >
+                        <span className="text-lg">{group.label}</span>
+                        <span className="display text-2xl leading-none">{fmt(group.total)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-3xl bg-white p-4 text-sm shadow-sm opacity-70">
+                  Put your name at the top, then order, so each person can see what they owe on this tab.
+                </div>
+              )}
+              {billPeople.map((group) => (
+                <div key={group.label} className="rounded-3xl bg-white p-4 shadow-sm">
+                  {splitDiners && (
+                    <div className="flex items-baseline justify-between">
+                      <div className="text-[10px] tracking-[0.18em] uppercase opacity-45">{group.label}</div>
+                      <div className="text-xs opacity-45">{group.items.reduce((n, i) => n + i.qty, 0)} item{group.items.reduce((n, i) => n + i.qty, 0) === 1 ? "" : "s"}</div>
                     </div>
-                    <div className="shrink-0">{money(i.price * i.qty, currency)}</div>
+                  )}
+                  <div className={splitDiners ? "mt-2 divide-y divide-ink-900/10" : "divide-y divide-ink-900/10"}>
+                    {group.items.map((i) => (
+                      <div key={i.id} className={`flex items-start justify-between gap-3 py-2.5 text-sm ${i.status === "cancelled" ? "opacity-40 line-through" : ""}`}>
+                        <div>
+                          <div>
+                            {i.qty}× {i.name}
+                          </div>
+                          {!splitDiners && i.diner ? <div className="text-xs opacity-50">{i.diner}</div> : null}
+                          {i.notes && <div className="text-xs opacity-50">{i.notes}</div>}
+                          <div className="text-[11px] tracking-wide uppercase opacity-45">{guestStatus(i.status)}</div>
+                        </div>
+                        <div className="shrink-0">{fmt(i.price * i.qty)}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <div className="mt-3 space-y-1 border-t border-ink-900/10 pt-3 text-sm">
-                <div className="flex justify-between opacity-70">
-                  <span>Subtotal</span>
-                  <span>{money(order.subtotal, currency)}</span>
+                  {splitDiners && (
+                    <div className="mt-3 flex items-baseline justify-between rounded-2xl bg-ink-900 px-3 py-2 text-cream-50">
+                      <span>{group.label} total</span>
+                      <span className="display text-2xl leading-none">{fmt(group.total)}</span>
+                    </div>
+                  )}
                 </div>
-                {Boolean(order.discountAmount) && (
+              ))}
+              <div className="rounded-3xl bg-white p-4 shadow-sm">
+                <div className="space-y-1 text-sm">
                   <div className="flex justify-between opacity-70">
-                    <span>Discount</span>
-                    <span>-{money(order.discountAmount, currency)}</span>
+                    <span>Subtotal</span>
+                    <span>{fmt(order.subtotal)}</span>
                   </div>
-                )}
-                <div className="flex justify-between opacity-70">
-                  <span>Tax {order.taxRate || 0}%</span>
-                  <span>{money(order.taxAmount, currency)}</span>
-                </div>
-                {Boolean(order.serviceAmount) && (
+                  {Boolean(order.discountAmount) && (
+                    <div className="flex justify-between opacity-70">
+                      <span>Discount</span>
+                      <span>-{fmt(order.discountAmount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between opacity-70">
-                    <span>Service</span>
-                    <span>{money(order.serviceAmount, currency)}</span>
+                    <span>Tax {order.taxRate || 0}%</span>
+                    <span>{fmt(order.taxAmount)}</span>
                   </div>
-                )}
-                <div className="flex justify-between pt-1 text-base font-medium">
-                  <span>Total</span>
-                  <span>{money(order.total, currency)}</span>
+                  {Boolean(order.serviceAmount) && (
+                    <div className="flex justify-between opacity-70">
+                      <span>Service</span>
+                      <span>{fmt(order.serviceAmount)}</span>
+                    </div>
+                  )}
+                  {Boolean(order.roundAmount) && (
+                    <div className="flex justify-between opacity-70">
+                      <span>{(order.roundAmount || 0) > 0 ? "Round up" : "Round down"}</span>
+                      <span>{fmt(order.roundAmount || 0)}</span>
+                    </div>
+                  )}
+                  {splitDiners &&
+                    billPeople.map((group) => (
+                      <div key={group.label} className="flex justify-between">
+                        <span>{group.label}</span>
+                        <span>{fmt(group.total)}</span>
+                      </div>
+                    ))}
+                  <div className="flex justify-between pt-1 text-base font-medium">
+                    <span>Table total</span>
+                    <span>{fmt(order.total)}</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
           {cartCount > 0 && order && (
             <button type="button" onClick={() => setTab("menu")} className="w-full text-center text-sm opacity-60">
@@ -268,7 +409,7 @@ export function QRMenuPage() {
               Call staff
             </button>
             <button onClick={() => setOpen(true)} className="flex-1 rounded-2xl bg-ink-900 py-3 text-cream-50">
-              Cart · {cartCount} · {money(total, currency)}
+              Cart · {cartCount} · {fmt(total)}
             </button>
           </div>
         )}
@@ -307,20 +448,27 @@ export function QRMenuPage() {
         <div className="fixed inset-0 z-20 bg-black/40 p-0 sm:p-4" onClick={() => setOpen(false)}>
           <div className="ml-auto h-full w-full max-w-md overflow-auto rounded-none bg-cream-50 p-5 sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="display text-2xl">Your order</div>
-            {cart.map((l) => (
-              <div key={l.menuItemId} className="mt-3 flex items-center justify-between">
+            {cart.map((l, idx) => (
+              <div key={`${l.menuItemId}-${l.diner}-${idx}`} className="mt-3 flex items-center justify-between">
                 <div>
                   {l.emoji} {l.name}
+                  {l.diner ? <div className="text-xs opacity-50">{l.diner}</div> : null}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setCart((p) => p.map((x) => (x.menuItemId === l.menuItemId ? { ...x, qty: Math.max(1, x.qty - 1) } : x)))}>−</button>
+                  <button onClick={() => setCart((p) => p.map((x, i) => (i === idx ? { ...x, qty: Math.max(1, x.qty - 1) } : x)))}>−</button>
                   {l.qty}
-                  <button onClick={() => setCart((p) => p.map((x) => (x.menuItemId === l.menuItemId ? { ...x, qty: x.qty + 1 } : x)))}>+</button>
+                  <button onClick={() => setCart((p) => p.map((x, i) => (i === idx ? { ...x, qty: x.qty + 1 } : x)))}>+</button>
                 </div>
               </div>
             ))}
-            <textarea
+            <input
               className="mt-4 w-full rounded-2xl border p-3"
+              placeholder="Your name (optional)"
+              value={diner}
+              onChange={(e) => setDiner(e.target.value)}
+            />
+            <textarea
+              className="mt-3 w-full rounded-2xl border p-3"
               placeholder="Allergies or notes"
               value={note}
               onChange={(e) => setNote(e.target.value)}

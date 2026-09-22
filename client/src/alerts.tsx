@@ -14,7 +14,7 @@ export type QrAlert = {
   total: number;
   currency: string;
   note?: string;
-  items: { qty: number; name: string; notes?: string }[];
+  items: { qty: number; name: string; notes?: string; diner?: string }[];
   order?: Order;
 };
 
@@ -116,6 +116,7 @@ export function QrAlertHost() {
                 <li key={i}>
                   <span className="text-gold-400">{item.qty}×</span> {item.name}
                   {item.notes ? <span className="text-cream-100/50"> · {item.notes}</span> : null}
+                  {item.diner ? <span className="text-sky-300"> · {item.diner}</span> : null}
                 </li>
               ))}
             </ul>

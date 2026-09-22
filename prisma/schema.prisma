@@ -18,6 +18,7 @@ model User {
   createdAt     DateTime @default(now())
   waiterOrders  Order[]  @relation("WaiterOrders")
   cashierOrders Order[]  @relation("CashierOrders")
+  shifts        TimeShift[]
 }
 
 model Category {
@@ -94,12 +95,14 @@ model Order {
   total           Float         @default(0)
   paidAmount      Float         @default(0)
   changeAmount    Float         @default(0)
+  roundAmount     Float         @default(0)
   paymentMethod   String        @default("")
   customerName    String        @default("")
   customerPhone   String        @default("")
   deliveryAddress String        @default("")
   fulfillment     String        @default("none")
   items           OrderItem[]
+  payments        OrderPayment[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   completedAt     DateTime?
@@ -115,6 +118,8 @@ model OrderItem {
   price          Float
   qty            Int
   notes          String    @default("")
+  diner          String    @default("")
+  paidQty        Int       @default(0)
   status         String    @default("pending")
   kitchenPrinted Boolean   @default(false)
   createdAt      DateTime  @default(now())
@@ -161,4 +166,24 @@ model Setting {
 model Counter {
   id    String @id
   value Int    @default(0)
+}
+
+model OrderPayment {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  method    String
+  amount    Float
+  label     String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model TimeShift {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clockIn   DateTime
+  clockOut  DateTime?
+  note      String    @default("")
+  createdAt DateTime  @default(now())
 }

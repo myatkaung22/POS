@@ -177,6 +177,7 @@ function Column({
                   <li key={item.id} className="flex justify-between gap-2">
                     <span>
                       {item.qty}× {item.name}
+                      {item.diner ? ` · ${item.diner}` : ""}
                     </span>
                     <span className="text-[11px] uppercase text-cream-100/40">{item.status}</span>
                   </li>

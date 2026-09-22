@@ -16,6 +16,8 @@ export const PERMISSIONS = {
   dispatch: ["admin", "manager", "cashier", "waiter"],
   promotions: ["admin", "manager"],
   printers: ["admin", "manager"],
+  clock: ["admin", "manager", "cashier", "waiter", "kitchen"],
+  timesheet: ["admin", "manager"],
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

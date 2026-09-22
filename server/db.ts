@@ -5,15 +5,22 @@ export const prisma = new PrismaClient();
 
 export const orderInclude = {
   items: { orderBy: { createdAt: "asc" as const } },
+  payments: { orderBy: { createdAt: "asc" as const } },
   table: true,
   waiter: { select: { id: true, name: true, role: true } },
   cashier: { select: { id: true, name: true, role: true } },
   promotion: true,
 };
 
+const SETTING_DEFAULTS: Record<string, string> = {
+  billDecimals: "2",
+  dayStartHour: "14",
+  dayEndHour: "2",
+};
+
 export async function getSettingsMap() {
   const rows = await prisma.setting.findMany();
-  const settings = Object.fromEntries(rows.map((r) => [r.id, r.value])) as Record<string, string>;
+  const settings = { ...SETTING_DEFAULTS, ...Object.fromEntries(rows.map((r) => [r.id, r.value])) } as Record<string, string>;
   settings.currency = currencySymbol(settings.currency);
   return settings;
 }

@@ -5,10 +5,12 @@ import { money, type Order } from "../types";
 import { useAuth } from "../auth";
 import { toast } from "../components/Toast";
 import { printSlip } from "../printSlip";
+import { useActionQueue } from "../actionQueue";
 
 export function OrdersPage() {
   const { settings, can } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
+  const { busy, run } = useActionQueue();
 
   async function load() {
     setOrders(await api<Order[]>("/api/orders?take=120"));
@@ -51,17 +53,22 @@ export function OrdersPage() {
               <td className="pr-4">
                 {can("orders") && (
                   <button
-                    onClick={async () => {
-                      const data = await api<{ content: string; order?: Order; print?: { status: string } }>(
-                        `/api/orders/${o.id}/bill`,
-                        { method: "POST" }
-                      );
-                      printSlip(`${o.paidAmount ? "Receipt" : "Bill"} #${o.orderNo}`, data.content);
-                      toast(data.print?.status === "printed" ? "Slip printed" : "Slip ready to print");
-                    }}
-                    className="rounded-xl bg-white/5 px-3 py-1"
+                    disabled={busy(`bill:${o.id}`)}
+                    onClick={() =>
+                      void run(`bill:${o.id}`, `Printing #${o.orderNo}`, async () => {
+                        const data = await api<{ content: string; order?: Order; print?: { status: string } }>(
+                          `/api/orders/${o.id}/bill`,
+                          { method: "POST" }
+                        );
+                        if (data.print?.status !== "printed") {
+                          void printSlip(`${o.paidAmount ? "Receipt" : "Bill"} #${o.orderNo}`, data.content);
+                        }
+                        toast(data.print?.status === "printed" ? "Slip printed" : "Slip ready to print");
+                      })
+                    }
+                    className="rounded-xl bg-white/5 px-3 py-1 disabled:opacity-40"
                   >
-                    Print
+                    {busy(`bill:${o.id}`) ? "Printing…" : "Print"}
                   </button>
                 )}
               </td>

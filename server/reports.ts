@@ -1,5 +1,14 @@
 import ExcelJS from "exceljs";
-import { prisma } from "./db.ts";
+import { getSettingsMap, prisma } from "./db.ts";
+import {
+  businessDate,
+  dateKey,
+  hourBuckets,
+  hoursFromSettings,
+  padHour,
+  periodBounds as hoursPeriodBounds,
+  type HoursConfig,
+} from "./hours.ts";
 
 export type ReportPeriod = "day" | "month" | "year";
 
@@ -31,6 +40,7 @@ export type BuiltReport = {
   topItems: { name: string; qty: number; sales: number }[];
   payments: { method: string; amount: number }[];
   types: { type: string; amount: number }[];
+  hours: HoursConfig;
   orders: {
     orderNo: number;
     when: string;
@@ -46,55 +56,14 @@ function money(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-export function periodBounds(query: ReportQuery) {
-  const now = new Date();
-  const period: ReportPeriod =
-    query.period === "month" || query.period === "monthly" || query.period === "weekly"
-      ? "month"
-      : query.period === "year"
-        ? "year"
-        : "day";
-  const year = Number(query.year) || now.getFullYear();
-  const month = Math.min(12, Math.max(1, Number(query.month) || now.getMonth() + 1));
-
-  if (period === "year") {
-    return {
-      period,
-      start: new Date(year, 0, 1, 0, 0, 0, 0),
-      end: new Date(year + 1, 0, 1, 0, 0, 0, 0),
-      label: String(year),
-    };
-  }
-  if (period === "month") {
-    return {
-      period,
-      start: new Date(year, month - 1, 1, 0, 0, 0, 0),
-      end: new Date(year, month, 1, 0, 0, 0, 0),
-      label: `${year}-${pad(month)}`,
-    };
-  }
-  let day = now.getDate();
-  let y = now.getFullYear();
-  let m = now.getMonth();
-  if (query.date) {
-    const parts = query.date.split("-").map(Number);
-    if (parts.length === 3 && parts.every((p) => Number.isFinite(p))) {
-      y = parts[0];
-      m = parts[1] - 1;
-      day = parts[2];
-    }
-  }
-  const start = new Date(y, m, day, 0, 0, 0, 0);
-  const end = new Date(y, m, day + 1, 0, 0, 0, 0);
-  return { period, start, end, label: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}` };
+export function periodBounds(query: ReportQuery, hours?: HoursConfig) {
+  return hoursPeriodBounds(query, hours || hoursFromSettings());
 }
 
 export async function buildReport(query: ReportQuery): Promise<BuiltReport> {
-  const bounds = periodBounds(query);
+  const settings = await getSettingsMap();
+  const hours = hoursFromSettings(settings);
+  const bounds = periodBounds(query, hours);
   const categoryFilter = String(query.category || "").trim();
 
   const [orders, menuItems, categoryRows] = await Promise.all([
@@ -103,7 +72,7 @@ export async function buildReport(query: ReportQuery): Promise<BuiltReport> {
         status: { in: ["paid", "completed"] },
         OR: [{ completedAt: { gte: bounds.start, lt: bounds.end } }, { createdAt: { gte: bounds.start, lt: bounds.end } }],
       },
-      include: { items: { include: { menuItem: { include: { category: true } } } }, table: true },
+      include: { items: { include: { menuItem: { include: { category: true } } } }, table: true, payments: true },
       orderBy: { createdAt: "asc" },
     }),
     prisma.menuItem.findMany({ include: { category: true } }),
@@ -178,31 +147,36 @@ export async function buildReport(query: ReportQuery): Promise<BuiltReport> {
 
   const buckets = new Map<string, { label: string; sales: number; orders: number }>();
   if (bounds.period === "day") {
-    for (let h = 0; h < 24; h++) buckets.set(`${h}:00`, { label: `${pad(h)}:00`, sales: 0, orders: 0 });
+    for (const bucket of hourBuckets(bounds.start, bounds.end)) {
+      buckets.set(bucket.key, { label: bucket.label, sales: 0, orders: 0 });
+    }
   } else if (bounds.period === "month") {
-    const cursor = new Date(bounds.start);
-    while (cursor < bounds.end) {
-      const key = `${cursor.getFullYear()}-${pad(cursor.getMonth() + 1)}-${pad(cursor.getDate())}`;
+    const year = Number(bounds.label.slice(0, 4));
+    const month = Number(bounds.label.slice(5, 7));
+    const days = new Date(year, month, 0).getDate();
+    for (let d = 1; d <= days; d++) {
+      const key = dateKey(year, month, d);
       buckets.set(key, { label: key, sales: 0, orders: 0 });
-      cursor.setDate(cursor.getDate() + 1);
     }
   } else {
+    const year = Number(bounds.label);
     for (let m = 1; m <= 12; m++) {
-      const key = `${bounds.start.getFullYear()}-${pad(m)}`;
+      const key = `${year}-${padHour(m)}`;
       buckets.set(key, { label: key, sales: 0, orders: 0 });
     }
   }
+  function seriesKey(when: Date) {
+    const biz = businessDate(when, hours);
+    if (bounds.period === "day") return { key: `${when.getHours()}:00`, label: `${padHour(when.getHours())}:00` };
+    if (bounds.period === "year") {
+      const key = `${biz.year}-${padHour(biz.month)}`;
+      return { key, label: key };
+    }
+    return { key: biz.key, label: biz.key };
+  }
   for (const order of matchingOrders) {
     const when = order.completedAt || order.createdAt;
-    let key = `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
-    let label = key;
-    if (bounds.period === "day") {
-      key = `${when.getHours()}:00`;
-      label = `${pad(when.getHours())}:00`;
-    } else if (bounds.period === "year") {
-      key = `${when.getFullYear()}-${pad(when.getMonth() + 1)}`;
-      label = key;
-    }
+    const { key, label } = seriesKey(when);
     const current = buckets.get(key) || { label, sales: 0, orders: 0 };
     current.sales = money(current.sales + (categoryFilter ? 0 : order.total));
     current.orders += 1;
@@ -211,9 +185,7 @@ export async function buildReport(query: ReportQuery): Promise<BuiltReport> {
   if (categoryFilter) {
     for (const order of matchingOrders) {
       const when = order.completedAt || order.createdAt;
-      let key = `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
-      if (bounds.period === "day") key = `${when.getHours()}:00`;
-      else if (bounds.period === "year") key = `${when.getFullYear()}-${pad(when.getMonth() + 1)}`;
+      const { key } = seriesKey(when);
       const sale = order.items
         .filter((i) => i.status !== "cancelled" && categoryName(i) === categoryFilter)
         .reduce((s, i) => s + i.qty * i.price, 0);
@@ -240,7 +212,13 @@ export async function buildReport(query: ReportQuery): Promise<BuiltReport> {
           .filter((i) => i.status !== "cancelled" && categoryName(i) === categoryFilter)
           .reduce((s, i) => s + i.qty * i.price, 0)
       : order.total;
-    methods.set(order.paymentMethod || "unknown", money((methods.get(order.paymentMethod || "unknown") || 0) + amount));
+    if (!categoryFilter && order.payments.length) {
+      for (const pay of order.payments) {
+        methods.set(pay.method || "unknown", money((methods.get(pay.method || "unknown") || 0) + pay.amount));
+      }
+    } else {
+      methods.set(order.paymentMethod || "unknown", money((methods.get(order.paymentMethod || "unknown") || 0) + amount));
+    }
     types.set(order.type, money((types.get(order.type) || 0) + amount));
   }
 
@@ -260,12 +238,13 @@ export async function buildReport(query: ReportQuery): Promise<BuiltReport> {
     topItems: [...itemMap.values()].sort((a, b) => b.sales - a.sales).slice(0, 12),
     payments: [...methods.entries()].map(([method, amount]) => ({ method, amount })),
     types: [...types.entries()].map(([type, amount]) => ({ type, amount })),
+    hours,
     orders: matchingOrders.map((o) => ({
       orderNo: o.orderNo,
       when: (o.completedAt || o.createdAt).toLocaleString(),
       type: o.type,
       table: o.table ? `T${o.table.number}` : "",
-      payment: o.paymentMethod || "",
+      payment: o.payments.length ? o.payments.map((p) => p.method).join("+") : o.paymentMethod || "",
       guest: o.customerName || "",
       total: categoryFilter
         ? money(
@@ -311,14 +290,18 @@ export async function buildReportWorkbook(report: BuiltReport, restaurant: strin
     { field: "Period", value: `${report.period} · ${report.label}` },
     { field: "From", value: report.start.toLocaleString() },
     { field: "To", value: report.end.toLocaleString() },
+    {
+      field: "Sales day",
+      value: `${padHour(report.hours.startHour)}:00 – ${padHour(report.hours.endHour)}:00`,
+    },
     { field: "Category", value: report.categoryFilter || "All categories" },
     { field: "Total sales (THB)", value: report.summary.totalSales },
     { field: "Orders", value: report.summary.orderCount },
     { field: "Average ticket (THB)", value: report.summary.avgTicket },
     { field: "Items sold", value: report.summary.itemCount },
   ]);
-  summary.getCell("B7").numFmt = "#,##0.00";
-  summary.getCell("B9").numFmt = "#,##0.00";
+  summary.getCell("B8").numFmt = "#,##0.00";
+  summary.getCell("B10").numFmt = "#,##0.00";
 
   const byCat = wb.addWorksheet("By category");
   byCat.columns = [
