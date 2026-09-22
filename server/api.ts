@@ -5,7 +5,7 @@ import { prisma, getSettingsMap, nextOrderNo, orderInclude } from "./db.ts";
 import { authRequired, findUserForLogin, requirePermission, signToken } from "./auth.ts";
 import { calcPricing, billDecimals, withBillRounding } from "./pricing.ts";
 import { buildInvoicePdf, buildOrderSlipText } from "./invoice.ts";
-import { buildKitchenSlip, buildReceiptSlip, discoverNetworkPrinters, kickCashDrawer, printToPrinter, slipWidth } from "./printer.ts";
+import { buildKitchenSlip, buildReceiptSlip, discoverNetworkPrinters, kickCashDrawer, printToPrinter, slipDateTime, slipWidth } from "./printer.ts";
 import { listWindowsPrinters, paperWidthForPrinter } from "./windows-print.ts";
 import { agentHeartbeat, claimNextAgentJob, completeAgentJob, printAgentConfigured, printAgentRequired } from "./print-agent.ts";
 import { emitAll, pushInbox } from "./realtime.ts";
@@ -1081,6 +1081,8 @@ export function registerRoutes(app: Express) {
             ? `Takeaway${updated.customerName ? ` · ${updated.customerName}` : ""}`
             : updated.type,
       cashier: req.user!.name,
+      guest: [updated.customerName, updated.customerPhone].filter(Boolean).join(" · "),
+      deliveryAddress: updated.type === "delivery" ? updated.deliveryAddress || "" : "",
       currency: currencySymbol(settings.currency),
       items: updated.items.filter((i) => i.status !== "cancelled").map((i) => ({
         qty: i.qty,
@@ -1412,7 +1414,7 @@ export function registerRoutes(app: Express) {
         "******************************************",
         "              TEST SLIP",
         printer.name,
-        new Date().toLocaleString(),
+        slipDateTime(),
         "------------------------------------------",
         "80mm kitchen / bill format",
         "******************************************",

@@ -9,6 +9,20 @@ import { personShares } from "./pricing.ts";
 export const SLIP_WIDTH_80MM = 42;
 export const SLIP_WIDTH_58MM = 32;
 
+/** Wall clock for slips — always Thailand (UTC+7), independent of server TZ. */
+export function slipDateTime(date: Date = new Date()) {
+  return date.toLocaleString("en-GB", {
+    timeZone: "Asia/Bangkok",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 function wrap(text: string, width: number) {
   const words = String(text || "").split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -146,7 +160,7 @@ export function buildKitchenSlip(opts: {
     center(opts.restaurant, w),
     rule(w, "*"),
     `#${opts.orderNo}  ${opts.tableLabel}`.slice(0, w),
-    `${opts.type.replace("_", " ").toUpperCase()}  ${new Date().toLocaleString()}`.slice(0, w),
+    `${opts.type.replace("_", " ").toUpperCase()}  ${slipDateTime()}`.slice(0, w),
   ];
   if (opts.addon) {
     lines.push(center("ADD-ON  ·  PRINT NEW ONLY", w));
@@ -183,6 +197,7 @@ export function buildBillSlip(opts: {
   tableLabel: string;
   type: string;
   guest?: string;
+  deliveryAddress?: string;
   server?: string;
   currency: string;
   items: { qty: number; name: string; price: number; notes?: string; diner?: string }[];
@@ -210,8 +225,12 @@ export function buildBillSlip(opts: {
     opts.type.replace("_", " ").toUpperCase(),
   ];
   if (opts.guest) wrap(`Guest: ${opts.guest}`, w).forEach((l) => lines.push(l));
+  if (opts.deliveryAddress) {
+    lines.push("Deliver to:");
+    wrap(opts.deliveryAddress, w).forEach((l) => lines.push(l));
+  }
   if (opts.server) lines.push(`Server: ${opts.server}`);
-  lines.push(new Date().toLocaleString(), rule(w));
+  lines.push(slipDateTime(), rule(w));
   const people = appendPricedItems(lines, opts.items, money, w, opts);
   lines.push(rule(w));
   lines.push(row("Subtotal", money(opts.subtotal), w));
@@ -241,6 +260,8 @@ export function buildReceiptSlip(opts: {
   tableLabel: string;
   cashier: string;
   currency: string;
+  guest?: string;
+  deliveryAddress?: string;
   items: { qty: number; name: string; price: number; notes?: string; diner?: string }[];
   subtotal: number;
   discountAmount: number;
@@ -268,9 +289,13 @@ export function buildReceiptSlip(opts: {
     `Order #${opts.orderNo}`,
     opts.tableLabel,
     `Cashier: ${opts.cashier}`,
-    new Date().toLocaleString(),
-    rule(w),
   ];
+  if (opts.guest) wrap(`Guest: ${opts.guest}`, w).forEach((l) => lines.push(l));
+  if (opts.deliveryAddress) {
+    lines.push("Deliver to:");
+    wrap(opts.deliveryAddress, w).forEach((l) => lines.push(l));
+  }
+  lines.push(slipDateTime(), rule(w));
   const people = appendPricedItems(lines, opts.items, money, w, opts);
   lines.push(rule(w));
   lines.push(row("Subtotal", money(opts.subtotal), w));
