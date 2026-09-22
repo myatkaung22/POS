@@ -846,6 +846,7 @@ export function PosPage() {
                 {promos.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
+                    {p.scope && p.scope !== "order" ? ` (${p.scope})` : ""}
                   </option>
                 ))}
               </select>

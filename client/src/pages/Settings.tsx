@@ -7,12 +7,13 @@ import type { Printer, PrintJob, Promotion, AuthUser } from "../types";
 import { runAction } from "../actionQueue";
 
 export function SettingsPage() {
-  const { settings, refresh, can } = useAuth();
+  const { settings, refresh, can, user } = useAuth();
   const [form, setForm] = useState(settings);
   const [promos, setPromos] = useState<Promotion[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [jobs, setJobs] = useState<PrintJob[]>([]);
   const [users, setUsers] = useState<AuthUser[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; items: { id: string; name: string; price: number }[] }[]>([]);
   const [tab, setTab] = useState("restaurant");
   const [systemPrinters, setSystemPrinters] = useState<{ name: string; portName: string; driverName: string }[]>([]);
   const [usbName, setUsbName] = useState("");
@@ -23,15 +24,19 @@ export function SettingsPage() {
   useEffect(() => setForm(settings), [settings]);
 
   async function load() {
-    const [p, pr, u] = await Promise.all([
+    const [p, pr, u, menu] = await Promise.all([
       api<Promotion[]>("/api/promotions"),
       api<{ printers: Printer[]; jobs: PrintJob[] }>("/api/printers"),
       can("users") ? api<AuthUser[]>("/api/users") : Promise.resolve([]),
+      can("promotions")
+        ? api<{ id: string; name: string; items: { id: string; name: string; price: number }[] }[]>("/api/menu")
+        : Promise.resolve([]),
     ]);
     setPromos(p);
     setPrinters(pr.printers);
     setJobs(pr.jobs);
     setUsers(u);
+    setCategories(menu || []);
     try {
       const sys = await api<{ printers: { name: string; portName: string; driverName: string }[] }>("/api/printers/system");
       setSystemPrinters(sys.printers || []);
@@ -151,35 +156,58 @@ export function SettingsPage() {
       )}
       {tab === "promotions" && (
         <Card>
+          <p className="mb-3 text-sm text-cream-100/60">
+            Order-wide promos for managers. Item and category discounts are admin-only and apply only to matching dishes.
+          </p>
           <PromoForm
+            isAdmin={user?.role === "admin"}
+            categories={categories}
             onCreate={async (body) => {
               await api("/api/promotions", { method: "POST", body: JSON.stringify(body) });
+              toast("Promotion added");
               void load();
             }}
           />
           <div className="mt-4 divide-y divide-white/5">
-            {promos.map((p) => (
-              <div key={p.id} className="flex items-center justify-between py-3 text-sm">
-                <div>
-                  <div className="font-medium">{p.name}</div>
-                  <div className="text-cream-100/50">
-                    {p.type} {p.value} · min {p.minOrder} · {p.active ? "active" : "off"}
+            {promos.map((p) => {
+              let targetIds: string[] = [];
+              try {
+                targetIds = JSON.parse(p.targets || "[]");
+              } catch {
+                targetIds = [];
+              }
+              const scope = p.scope || "order";
+              const targetNames =
+                scope === "category"
+                  ? categories.filter((c) => targetIds.includes(c.id)).map((c) => c.name)
+                  : scope === "item"
+                    ? categories.flatMap((c) => c.items).filter((i) => targetIds.includes(i.id)).map((i) => i.name)
+                    : [];
+              return (
+                <div key={p.id} className="flex items-center justify-between gap-3 py-3 text-sm">
+                  <div className="min-w-0">
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-cream-100/50">
+                      {scope} · {p.type} {p.value}
+                      {p.type === "percent" ? "%" : "฿"} · min {p.minOrder} · {p.active ? "active" : "off"}
+                      {targetNames.length ? ` · ${targetNames.slice(0, 4).join(", ")}${targetNames.length > 4 ? "…" : ""}` : ""}
+                    </div>
                   </div>
+                  <button
+                    onClick={async () => {
+                      await api(`/api/promotions/${p.id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ active: !p.active }),
+                      });
+                      void load();
+                    }}
+                    className="rounded-xl bg-white/5 px-3 py-1"
+                  >
+                    Toggle
+                  </button>
                 </div>
-                <button
-                  onClick={async () => {
-                    await api(`/api/promotions/${p.id}`, {
-                      method: "PATCH",
-                      body: JSON.stringify({ active: !p.active }),
-                    });
-                    void load();
-                  }}
-                  className="rounded-xl bg-white/5 px-3 py-1"
-                >
-                  Toggle
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}
@@ -496,26 +524,100 @@ function Save({ onClick }: { onClick: () => void }) {
   );
 }
 
-function PromoForm({ onCreate }: { onCreate: (body: object) => Promise<void> }) {
+function PromoForm({
+  onCreate,
+  isAdmin,
+  categories,
+}: {
+  onCreate: (body: object) => Promise<void>;
+  isAdmin: boolean;
+  categories: { id: string; name: string; items: { id: string; name: string; price: number }[] }[];
+}) {
   const [name, setName] = useState("");
   const [type, setType] = useState("percent");
   const [value, setValue] = useState("10");
   const [minOrder, setMinOrder] = useState("0");
+  const [scope, setScope] = useState("order");
+  const [targets, setTargets] = useState<string[]>([]);
+  const dishes = categories.flatMap((c) => c.items.map((i) => ({ ...i, categoryName: c.name })));
+
+  function toggleTarget(id: string) {
+    setTargets((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
+  }
+
   return (
-    <div className="grid gap-2 md:grid-cols-5">
-      <input className="rounded-2xl bg-ink-800 px-3 py-2 md:col-span-2" placeholder="Promo name" value={name} onChange={(e) => setName(e.target.value)} />
-      <select className="rounded-2xl bg-ink-800 px-3 py-2" value={type} onChange={(e) => setType(e.target.value)}>
-        <option value="percent">Percent</option>
-        <option value="fixed">Fixed</option>
-      </select>
-      <input className="rounded-2xl bg-ink-800 px-3 py-2" value={value} onChange={(e) => setValue(e.target.value)} />
-      <button
-        onClick={() => void onCreate({ name, type, value: Number(value), minOrder: Number(minOrder) })}
-        className="rounded-2xl bg-gold-500 text-ink-950"
-      >
-        Add
-      </button>
-      <input className="rounded-2xl bg-ink-800 px-3 py-2 md:col-span-5" placeholder="Minimum order (฿)" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} />
+    <div className="grid gap-2">
+      <div className="grid gap-2 md:grid-cols-5">
+        <input className="rounded-2xl bg-ink-800 px-3 py-2 md:col-span-2" placeholder="Promo name" value={name} onChange={(e) => setName(e.target.value)} />
+        <select className="rounded-2xl bg-ink-800 px-3 py-2" value={type} onChange={(e) => setType(e.target.value)}>
+          <option value="percent">Percent</option>
+          <option value="fixed">Fixed ฿</option>
+        </select>
+        <input className="rounded-2xl bg-ink-800 px-3 py-2" value={value} onChange={(e) => setValue(e.target.value)} />
+        <button
+          type="button"
+          onClick={() =>
+            void onCreate({
+              name,
+              type,
+              value: Number(value),
+              minOrder: Number(minOrder),
+              scope: isAdmin ? scope : "order",
+              targets: isAdmin && scope !== "order" ? targets : [],
+            }).then(() => {
+              setName("");
+              setTargets([]);
+            })
+          }
+          className="rounded-2xl bg-gold-500 text-ink-950"
+        >
+          Add
+        </button>
+      </div>
+      <input className="rounded-2xl bg-ink-800 px-3 py-2" placeholder="Minimum eligible amount (฿)" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} />
+      {isAdmin && (
+        <>
+          <select
+            className="rounded-2xl bg-ink-800 px-3 py-2"
+            value={scope}
+            onChange={(e) => {
+              setScope(e.target.value);
+              setTargets([]);
+            }}
+          >
+            <option value="order">Whole order</option>
+            <option value="category">Category based (admin)</option>
+            <option value="item">Item based (admin)</option>
+          </select>
+          {scope === "category" && (
+            <div className="flex flex-wrap gap-2 rounded-2xl bg-ink-800 p-3">
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => toggleTarget(c.id)}
+                  className={`rounded-full px-3 py-1 text-xs ${targets.includes(c.id) ? "bg-gold-500 text-ink-950" : "bg-white/5"}`}
+                >
+                  {c.name}
+                </button>
+              ))}
+              {!categories.length && <span className="text-xs text-cream-100/50">No categories loaded</span>}
+            </div>
+          )}
+          {scope === "item" && (
+            <div className="max-h-48 space-y-1 overflow-auto rounded-2xl bg-ink-800 p-3">
+              {dishes.map((item) => (
+                <label key={item.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={targets.includes(item.id)} onChange={() => toggleTarget(item.id)} />
+                  <span className="text-cream-100/50">{item.categoryName}</span>
+                  <span>{item.name}</span>
+                </label>
+              ))}
+              {!dishes.length && <span className="text-xs text-cream-100/50">No dishes loaded</span>}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

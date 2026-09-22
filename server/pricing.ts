@@ -1,10 +1,19 @@
 export type PricingInput = {
-  items: { price: number; qty: number; status?: string }[];
+  items: { price: number; qty: number; status?: string; menuItemId?: string | null; categoryId?: string | null }[];
   taxRate: number;
   serviceRate: number;
   discountType: string;
   discountValue: number;
-  promotion?: { type: string; value: number; minOrder: number; active: boolean; startDate?: Date | null; endDate?: Date | null } | null;
+  promotion?: {
+    type: string;
+    value: number;
+    minOrder: number;
+    active: boolean;
+    scope?: string | null;
+    targets?: string | null;
+    startDate?: Date | null;
+    endDate?: Date | null;
+  } | null;
 };
 
 export type PricingResult = {
@@ -94,12 +103,38 @@ export function personShares<T extends { diner?: string; qty: number; price: num
   return parts;
 }
 
+function parseTargets(raw?: string | null) {
+  try {
+    const parsed = JSON.parse(String(raw || "[]"));
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function eligibleSubtotal(
+  items: PricingInput["items"],
+  promo: NonNullable<PricingInput["promotion"]>
+) {
+  const live = items.filter((i) => i.status !== "cancelled");
+  const scope = String(promo.scope || "order");
+  const targets = new Set(parseTargets(promo.targets));
+  if (scope === "item" && targets.size) {
+    return money(
+      live.filter((i) => i.menuItemId && targets.has(String(i.menuItemId))).reduce((s, i) => s + i.price * i.qty, 0)
+    );
+  }
+  if (scope === "category" && targets.size) {
+    return money(
+      live.filter((i) => i.categoryId && targets.has(String(i.categoryId))).reduce((s, i) => s + i.price * i.qty, 0)
+    );
+  }
+  return money(live.reduce((s, i) => s + i.price * i.qty, 0));
+}
+
 export function calcPricing(input: PricingInput): PricingResult {
-  const subtotal = money(
-    input.items
-      .filter((i) => i.status !== "cancelled")
-      .reduce((sum, i) => sum + i.price * i.qty, 0)
-  );
+  const live = input.items.filter((i) => i.status !== "cancelled");
+  const subtotal = money(live.reduce((sum, i) => sum + i.price * i.qty, 0));
 
   let discountAmount = 0;
   const now = new Date();
@@ -107,13 +142,14 @@ export function calcPricing(input: PricingInput): PricingResult {
   const promoOk =
     promo &&
     promo.active &&
-    subtotal >= (promo.minOrder || 0) &&
     (!promo.startDate || promo.startDate <= now) &&
     (!promo.endDate || promo.endDate >= now);
 
   if (input.discountType === "promotion" && promoOk && promo) {
-    discountAmount =
-      promo.type === "percent" ? subtotal * (promo.value / 100) : promo.value;
+    const base = eligibleSubtotal(input.items, promo);
+    if (base >= (promo.minOrder || 0)) {
+      discountAmount = promo.type === "percent" ? base * (promo.value / 100) : Math.min(promo.value, base);
+    }
   } else if (input.discountType === "percent") {
     discountAmount = subtotal * (input.discountValue / 100);
   } else if (input.discountType === "fixed") {

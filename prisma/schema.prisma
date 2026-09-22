@@ -64,6 +64,10 @@ model Promotion {
   type      String
   value     Float
   minOrder  Float     @default(0)
+  /// order = whole check · category = selected categories · item = selected dishes
+  scope     String    @default("order")
+  /// JSON string array of categoryIds or menuItemIds when scope is category/item
+  targets   String    @default("[]")
   active    Boolean   @default(true)
   startDate DateTime?
   endDate   DateTime?

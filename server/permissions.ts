@@ -16,6 +16,7 @@ export const PERMISSIONS = {
   dispatch: ["admin", "manager", "cashier", "waiter"],
   promotions: ["admin", "manager"],
   printers: ["admin", "manager"],
+  drawer: ["admin", "manager", "cashier", "waiter", "kitchen"],
   clock: ["admin", "manager", "cashier", "waiter", "kitchen"],
   timesheet: ["admin", "manager"],
 } as const;

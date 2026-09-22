@@ -38,13 +38,22 @@ function asyncHandler(fn: (req: Request, res: Response) => Promise<void>) {
 async function reprice(orderId: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: true, promotion: true },
+    include: {
+      items: { include: { menuItem: { select: { categoryId: true } } } },
+      promotion: true,
+    },
   });
   if (!order) throw Object.assign(new Error("Order not found"), { status: 404 });
   const settings = await getSettingsMap();
   const pricing = withBillRounding(
     calcPricing({
-      items: order.items,
+      items: order.items.map((item) => ({
+        price: item.price,
+        qty: item.qty,
+        status: item.status,
+        menuItemId: item.menuItemId,
+        categoryId: item.menuItem?.categoryId || null,
+      })),
       taxRate: order.taxRate,
       serviceRate: order.serviceRate,
       discountType: order.discountType,
@@ -1298,12 +1307,26 @@ export function registerRoutes(app: Express) {
   }));
 
   app.post("/api/promotions", authRequired, requirePermission("promotions"), asyncHandler(async (req, res) => {
+    const scope = String(req.body.scope || "order");
+    if ((scope === "category" || scope === "item") && req.user!.role !== "admin") {
+      res.status(403).json({ error: "Only admin can create item or category promotions" });
+      return;
+    }
+    const targets = Array.isArray(req.body.targets)
+      ? req.body.targets.map(String)
+      : [];
+    if ((scope === "category" || scope === "item") && !targets.length) {
+      res.status(400).json({ error: "Select at least one category or item" });
+      return;
+    }
     const promo = await prisma.promotion.create({
       data: {
         name: req.body.name,
         type: req.body.type,
         value: Number(req.body.value),
         minOrder: Number(req.body.minOrder || 0),
+        scope,
+        targets: JSON.stringify(targets),
         active: req.body.active ?? true,
         startDate: req.body.startDate ? new Date(req.body.startDate) : null,
         endDate: req.body.endDate ? new Date(req.body.endDate) : null,
@@ -1313,6 +1336,22 @@ export function registerRoutes(app: Express) {
   }));
 
   app.patch("/api/promotions/:id", authRequired, requirePermission("promotions"), asyncHandler(async (req, res) => {
+    const existing = await prisma.promotion.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: "Promotion not found" });
+      return;
+    }
+    const scoped = existing.scope === "category" || existing.scope === "item";
+    const onlyToggle = Object.keys(req.body).every((k) => k === "active");
+    if (scoped && req.user!.role !== "admin" && !onlyToggle) {
+      res.status(403).json({ error: "Only admin can edit item or category promotions" });
+      return;
+    }
+    let targets: string | undefined;
+    if (req.body.targets !== undefined && req.user!.role === "admin") {
+      const list = Array.isArray(req.body.targets) ? req.body.targets.map(String) : [];
+      targets = JSON.stringify(list);
+    }
     const promo = await prisma.promotion.update({
       where: { id: req.params.id },
       data: {
@@ -1320,6 +1359,8 @@ export function registerRoutes(app: Express) {
         type: req.body.type,
         value: req.body.value !== undefined ? Number(req.body.value) : undefined,
         minOrder: req.body.minOrder !== undefined ? Number(req.body.minOrder) : undefined,
+        scope: req.user!.role === "admin" && req.body.scope !== undefined ? String(req.body.scope) : undefined,
+        targets,
         active: req.body.active,
         startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
         endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
@@ -1329,6 +1370,11 @@ export function registerRoutes(app: Express) {
   }));
 
   app.delete("/api/promotions/:id", authRequired, requirePermission("promotions"), asyncHandler(async (req, res) => {
+    const existing = await prisma.promotion.findUnique({ where: { id: req.params.id } });
+    if (existing && (existing.scope === "category" || existing.scope === "item") && req.user!.role !== "admin") {
+      res.status(403).json({ error: "Only admin can delete item or category promotions" });
+      return;
+    }
     await prisma.promotion.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
   }));
@@ -1539,7 +1585,7 @@ export function registerRoutes(app: Express) {
     res.json(result);
   }));
 
-  app.post("/api/printers/drawer", authRequired, requirePermission("checkout"), asyncHandler(async (_req, res) => {
+  app.post("/api/printers/drawer", authRequired, requirePermission("drawer"), asyncHandler(async (_req, res) => {
     res.json(await kickCashDrawer());
   }));
 

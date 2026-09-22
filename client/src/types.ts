@@ -48,6 +48,8 @@ export type Promotion = {
   type: string;
   value: number;
   minOrder: number;
+  scope?: string;
+  targets?: string;
   active: boolean;
   startDate?: string | null;
   endDate?: string | null;

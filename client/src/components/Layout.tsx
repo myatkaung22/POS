@@ -12,6 +12,7 @@ import {
   UtensilsCrossed,
   BarChart3,
   Sparkles,
+  Banknote,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import { useEffect, useState } from "react";
@@ -20,6 +21,7 @@ import type { InboxMessage } from "../types";
 import { api } from "../api";
 import { toast } from "./Toast";
 import { QrAlertHost, useQrAlerts } from "../alerts";
+import { runAction } from "../actionQueue";
 
 const links = [
   { to: "/tables", label: "Floor", icon: Table2, perm: "tables" },
@@ -136,6 +138,21 @@ export function Layout() {
               <div className="tabular-nums text-cream-50">{clock.toLocaleTimeString()}</div>
               <div className="text-xs text-cream-100/45">{clock.toLocaleDateString()}</div>
             </div>
+            {can("drawer") && (
+              <button
+                type="button"
+                onClick={() =>
+                  void runAction("drawer-kick", "Opening drawer", async () => {
+                    const r = await api<{ status?: string }>("/api/printers/drawer", { method: "POST" });
+                    toast(r.status === "printed" ? "Drawer opened" : "Drawer kick sent", r.status === "printed" ? "ok" : "info");
+                  })
+                }
+                className="inline-flex items-center gap-1.5 rounded-2xl border border-white/10 px-2 py-1.5 text-[11px] text-cream-100/80 hover:bg-white/5 sm:px-3 sm:text-sm"
+              >
+                <Banknote size={16} />
+                <span className="hidden sm:inline">Drawer</span>
+              </button>
+            )}
             {can("clock") && (
               <button
                 onClick={async () => {
