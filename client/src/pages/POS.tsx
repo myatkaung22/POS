@@ -315,6 +315,40 @@ export function PosPage() {
     });
   }
 
+  async function cancelItem(itemId: string) {
+    if (!order) return;
+    if (!window.confirm("Remove this item and print a cancel slip?")) return;
+    await run(`void-item:${itemId}`, "Cancelling item", async () => {
+      const data = await api<{ order: Order; print?: { status: string }; content?: string }>(
+        `/api/orders/${order.id}/items/${itemId}/cancel`,
+        { method: "POST" }
+      );
+      if (data.order.status === "cancelled") {
+        setOrder(null);
+        toast(data.print?.status === "printed" ? "Item cancelled · order cleared · cancel slip sent" : "Item cancelled · order cleared");
+        navigate("/tables");
+        return;
+      }
+      setOrder(data.order);
+      if (data.content && data.print?.status !== "printed") void printSlip(`Cancel #${data.order.orderNo}`, data.content);
+      toast(data.print?.status === "printed" ? "Item cancelled · cancel slip sent" : "Item cancelled");
+    });
+  }
+
+  async function cancelOrder() {
+    if (!order) return;
+    if (!window.confirm("Cancel this whole order? A cancel slip will print and the table will be freed.")) return;
+    await run(`cancel:${order.id}`, "Cancelling order", async () => {
+      const data = await api<{ order: Order; print?: { status: string }; content?: string }>(`/api/orders/${order.id}/cancel`, {
+        method: "POST",
+      });
+      if (data.content && data.print?.status !== "printed") void printSlip(`Cancel #${data.order.orderNo}`, data.content);
+      setOrder(null);
+      toast(data.print?.status === "printed" ? "Order cancelled · cancel slip sent" : "Order cancelled");
+      navigate(data.order.type === "takeaway" || data.order.type === "delivery" ? "/dispatch" : "/tables");
+    });
+  }
+
   async function pay() {
     if (!order) return;
     const payments = payLines
@@ -657,7 +691,12 @@ export function PosPage() {
                         </div>
                       </div>
                       {!locked && (
-                        <button onClick={() => void setQty(item.id, 0)} className="text-rose-400">
+                        <button
+                          type="button"
+                          disabled={busy(`void-item:${item.id}`)}
+                          onClick={() => void cancelItem(item.id)}
+                          className="text-rose-400 disabled:opacity-40"
+                        >
                           <Trash2 size={14} />
                         </button>
                       )}
@@ -728,7 +767,7 @@ export function PosPage() {
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-4 text-sm">
-          {!order?.items.length && (
+          {!order?.items.filter((i) => i.status !== "cancelled").length && (
             <div className="px-2 py-10 text-center text-cream-100/40">Add dishes on Tables, then open Bill to split and checkout.</div>
           )}
           {offPrem && order && (
@@ -762,6 +801,38 @@ export function PosPage() {
               )}
             </div>
           )}
+          {ticketPeople.map((group) => (
+            <div key={group.label} className="mb-3">
+              {splitDiners && (
+                <div className="mb-1 text-[11px] tracking-[0.16em] text-gold-400 uppercase">{group.label}</div>
+              )}
+              {group.items.map((item) => (
+                <div key={item.id} className="mb-2 flex items-start justify-between gap-2 rounded-2xl bg-ink-800 p-3">
+                  <div className="min-w-0">
+                    <div className="font-medium">
+                      {item.qty}× {item.name}
+                    </div>
+                    <div className="text-xs text-cream-100/45">
+                      {fmt(item.price * item.qty)}
+                      {item.diner && !splitDiners ? ` · ${item.diner}` : ""}
+                      {item.notes ? ` · ${item.notes}` : ""}
+                      {` · ${itemKitchenLabel(item.status)}`}
+                    </div>
+                  </div>
+                  {!locked && (
+                    <button
+                      type="button"
+                      disabled={busy(`void-item:${item.id}`)}
+                      onClick={() => void cancelItem(item.id)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-rose-500/15 px-2.5 py-1.5 text-xs text-rose-300 disabled:opacity-40"
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
           <div className="grid grid-cols-2 gap-2">
             <select value={discountType} onChange={(e) => setDiscountType(e.target.value)} className="rounded-xl bg-ink-800 px-2 py-2" disabled={locked}>
               <option value="none">No discount</option>
@@ -824,9 +895,19 @@ export function PosPage() {
           >
             <Printer size={16} /> {busy(`bill:${order?.id}`) ? "Printing…" : "Print bill"}
           </button>
+          {!locked && (
+            <button
+              type="button"
+              disabled={!order || busy(`cancel:${order?.id}`)}
+              onClick={() => void cancelOrder()}
+              className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-500/20 py-2.5 text-rose-300 disabled:opacity-35 ${can("checkout") ? "" : "col-span-2"}`}
+            >
+              <X size={16} /> {busy(`cancel:${order?.id}`) ? "Cancelling…" : "Cancel order"}
+            </button>
+          )}
           {can("checkout") && !locked && (
             <button
-              disabled={!order?.items.length}
+              disabled={!order?.items.some((i) => i.status !== "cancelled")}
               onClick={() => {
                 if (order?.type === "delivery" && !guestAddress.trim()) {
                   toast("Add a delivery address first", "err");
@@ -836,7 +917,7 @@ export function PosPage() {
                 setTender("");
                 setPayOpen(true);
               }}
-              className="col-span-2 rounded-2xl bg-gold-500 py-3 font-medium text-ink-950 disabled:opacity-40"
+              className="rounded-2xl bg-gold-500 py-3 font-medium text-ink-950 disabled:opacity-40"
             >
               {offPrem ? "Checkout" : "Checkout · free table"}
             </button>

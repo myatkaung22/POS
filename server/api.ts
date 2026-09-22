@@ -5,7 +5,7 @@ import { prisma, getSettingsMap, nextOrderNo, orderInclude } from "./db.ts";
 import { authRequired, findUserForLogin, requirePermission, signToken } from "./auth.ts";
 import { calcPricing, billDecimals, withBillRounding } from "./pricing.ts";
 import { buildInvoicePdf, buildOrderSlipText } from "./invoice.ts";
-import { buildKitchenSlip, buildReceiptSlip, discoverNetworkPrinters, kickCashDrawer, printToPrinter, slipDateTime, slipWidth } from "./printer.ts";
+import { buildCancelSlip, buildKitchenSlip, buildReceiptSlip, discoverNetworkPrinters, kickCashDrawer, printToPrinter, slipDateTime, slipWidth } from "./printer.ts";
 import { listWindowsPrinters, paperWidthForPrinter } from "./windows-print.ts";
 import { agentHeartbeat, claimNextAgentJob, completeAgentJob, printAgentConfigured, printAgentRequired } from "./print-agent.ts";
 import { emitAll, pushInbox } from "./realtime.ts";
@@ -141,6 +141,21 @@ async function syncTableStatus(tableId?: string | null) {
 
 function publicBase(settings: Record<string, string>, req: Request) {
   return (settings.publicUrl || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+}
+
+function kitchenTableLabel(order: {
+  type: string;
+  customerName?: string | null;
+  table?: { number: number; name: string } | null;
+}) {
+  if (order.table) return `Table ${order.table.number} ${order.table.name}`;
+  if (order.type === "delivery") return order.customerName ? `DELIVERY ${order.customerName}` : "DELIVERY";
+  if (order.type === "takeaway") return order.customerName ? `TAKEAWAY ${order.customerName}` : "TAKEAWAY";
+  return order.type;
+}
+
+function itemWasInKitchen(item: { status: string; kitchenPrinted?: boolean }) {
+  return Boolean(item.kitchenPrinted) || ["sent", "preparing", "ready", "served"].includes(item.status);
 }
 
 export function registerRoutes(app: Express) {
@@ -1169,14 +1184,112 @@ export function registerRoutes(app: Express) {
   }));
 
   app.post("/api/orders/:id/cancel", authRequired, requirePermission("pos"), asyncHandler(async (req, res) => {
-    const updated = await prisma.order.update({
+    const order = await prisma.order.findUnique({
       where: { id: req.params.id },
-      data: { status: "cancelled", completedAt: new Date() },
+      include: orderInclude,
+    });
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+    if (["paid", "completed", "cancelled"].includes(order.status)) {
+      res.status(400).json({ error: "This order cannot be cancelled" });
+      return;
+    }
+    const live = order.items.filter((i) => i.status !== "cancelled");
+    const kitchenItems = live.filter(itemWasInKitchen);
+    await prisma.orderItem.updateMany({
+      where: { orderId: order.id, status: { not: "cancelled" } },
+      data: { status: "cancelled" },
+    });
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: "cancelled", completedAt: new Date(), subtotal: 0, discountAmount: 0, taxAmount: 0, serviceAmount: 0, roundAmount: 0, total: 0 },
       include: orderInclude,
     });
     await syncTableStatus(updated.tableId);
+    const settings = await getSettingsMap();
+    const width = await slipWidth("kitchen");
+    const slipItems = (kitchenItems.length ? kitchenItems : live).map((i) => ({
+      qty: i.qty,
+      name: i.name,
+      notes: i.notes,
+      diner: i.diner,
+    }));
+    let print = null;
+    let content = "";
+    if (slipItems.length) {
+      content = buildCancelSlip({
+        restaurant: settings.restaurantName || "4 Corner Bar & Restaurant",
+        orderNo: order.orderNo,
+        tableLabel: kitchenTableLabel(order),
+        type: order.type,
+        note: [order.customerName, order.customerPhone, order.deliveryAddress].filter(Boolean).join(" · "),
+        items: slipItems,
+        width,
+        scope: "order",
+      });
+      print = await printToPrinter({
+        printerType: "kitchen",
+        title: `Cancel #${order.orderNo}`,
+        content,
+      });
+    }
     emitAll("order:updated", updated);
-    res.json(updated);
+    res.json({ order: updated, print, content });
+  }));
+
+  app.post("/api/orders/:id/items/:itemId/cancel", authRequired, requirePermission("pos"), asyncHandler(async (req, res) => {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { items: true, table: true },
+    });
+    if (!order || ["paid", "completed", "cancelled"].includes(order.status)) {
+      res.status(400).json({ error: "Order cannot be changed" });
+      return;
+    }
+    const item = order.items.find((i) => i.id === req.params.itemId);
+    if (!item || item.status === "cancelled") {
+      res.status(404).json({ error: "Line not found" });
+      return;
+    }
+    await prisma.orderItem.update({
+      where: { id: item.id },
+      data: { status: "cancelled" },
+    });
+    const remaining = await prisma.orderItem.count({
+      where: { orderId: order.id, status: { not: "cancelled" } },
+    });
+    let updated;
+    if (remaining === 0) {
+      updated = await prisma.order.update({
+        where: { id: order.id },
+        data: { status: "cancelled", completedAt: new Date(), subtotal: 0, discountAmount: 0, taxAmount: 0, serviceAmount: 0, roundAmount: 0, total: 0 },
+        include: orderInclude,
+      });
+    } else {
+      updated = await reprice(order.id);
+    }
+    await syncTableStatus(order.tableId);
+    const settings = await getSettingsMap();
+    const width = await slipWidth("kitchen");
+    const content = buildCancelSlip({
+      restaurant: settings.restaurantName || "4 Corner Bar & Restaurant",
+      orderNo: order.orderNo,
+      tableLabel: kitchenTableLabel(order),
+      type: order.type,
+      note: remaining === 0 ? "Order cleared · table free" : undefined,
+      items: [{ qty: item.qty, name: item.name, notes: item.notes, diner: item.diner }],
+      width,
+      scope: remaining === 0 ? "order" : "item",
+    });
+    const print = await printToPrinter({
+      printerType: "kitchen",
+      title: `Cancel item #${order.orderNo}`,
+      content,
+    });
+    emitAll("order:updated", updated);
+    res.json({ order: updated, print, content });
   }));
 
   app.get("/api/promotions", authRequired, asyncHandler(async (_req, res) => {

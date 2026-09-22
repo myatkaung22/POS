@@ -189,6 +189,43 @@ export function buildKitchenSlip(opts: {
   return lines.join("\n");
 }
 
+export function buildCancelSlip(opts: {
+  restaurant: string;
+  orderNo: number;
+  tableLabel: string;
+  type: string;
+  note?: string;
+  items: { qty: number; name: string; notes?: string; diner?: string }[];
+  width?: number;
+  scope?: "order" | "item";
+}) {
+  const w = opts.width ?? SLIP_WIDTH_80MM;
+  const title = opts.scope === "item" ? "CANCEL ITEM" : "CANCEL ORDER";
+  const lines = [
+    rule(w, "*"),
+    center(title, w),
+    center(opts.restaurant, w),
+    rule(w, "*"),
+    `#${opts.orderNo}  ${opts.tableLabel}`.slice(0, w),
+    `${opts.type.replace("_", " ").toUpperCase()}  ${slipDateTime()}`.slice(0, w),
+    center("*** VOID / DO NOT MAKE ***", w),
+    rule(w),
+  ];
+  for (const item of opts.items) {
+    const qty = String(item.qty).padStart(2, " ");
+    wrap(`${qty}  ${item.name.toUpperCase()}`, w).forEach((l) => lines.push(l));
+    if (item.diner) wrap(`    @ ${item.diner}`, w).forEach((l) => lines.push(l));
+    if (item.notes) wrap(`    ** ${item.notes}`, w).forEach((l) => lines.push(l));
+    lines.push("");
+  }
+  if (opts.note) {
+    lines.push(rule(w));
+    wrap(opts.note, w).forEach((l) => lines.push(l));
+  }
+  lines.push(rule(w), center("REMOVE FROM BOARD", w), rule(w, "*"), "");
+  return lines.join("\n");
+}
+
 export function buildBillSlip(opts: {
   restaurant: string;
   address: string;
