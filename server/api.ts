@@ -100,7 +100,7 @@ function parsePayRequest(body: Record<string, unknown>, total: number) {
     paidAmount: money(sum - cashAmt + (cashAmt ? cashTender : 0)),
     changeAmount: cashAmt ? money(cashTender - cashAmt) : 0,
     paymentMethod: payments.map((p) => p.method).join("+"),
-    kickDrawer: cashAmt > 0,
+    kickDrawer: true,
   };
 }
 
@@ -1424,7 +1424,8 @@ export function registerRoutes(app: Express) {
       {
         type: "receipt",
         name: viaAgent ? "Receipt via shop agent" : "Receipt / invoice Ethernet",
-        cashDrawerEnabled: Boolean(req.body.cashDrawer),
+        // Drawer is wired to the receipt printer (e.g. Roller LB-405B1). Default on.
+        cashDrawerEnabled: req.body.cashDrawer === undefined ? true : Boolean(req.body.cashDrawer),
       },
     ];
     const saved = [];

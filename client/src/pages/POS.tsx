@@ -1012,7 +1012,7 @@ export function PosPage() {
             <p className="mt-2 text-xs text-cream-100/45">
               {offPrem
                 ? "Prints a receipt. The order stays on Pickup & delivery until collected or delivered."
-                : "Prints a receipt, opens the cash drawer on cash, and sets the table back to free."}
+                : "Prints a receipt, opens the cash drawer, and sets the table back to free."}
             </p>
             <div className="mt-4 flex gap-2">
               <button onClick={() => setPayOpen(false)} className="flex-1 rounded-2xl bg-white/5 py-3">

@@ -227,9 +227,9 @@ export function SettingsPage() {
                   try {
                     await api("/api/printers/network-setup", {
                       method: "POST",
-                      body: JSON.stringify({ host: ethernetHost.trim(), port: 9100, paperWidth: 32 }),
+                      body: JSON.stringify({ host: ethernetHost.trim(), port: 9100, paperWidth: 32, cashDrawer: true }),
                     });
-                    toast("Ethernet printer set for kitchen and invoices");
+                    toast("Ethernet printer set for kitchen and invoices (drawer kick on)");
                     void load();
                   } catch (err) {
                     toast(err instanceof Error ? err.message : "Could not save printer", "err");
@@ -246,9 +246,9 @@ export function SettingsPage() {
                   try {
                     await api("/api/printers/network-setup", {
                       method: "POST",
-                      body: JSON.stringify({ host: ethernetHost.trim(), port: 9100, paperWidth: 32, viaAgent: true }),
+                      body: JSON.stringify({ host: ethernetHost.trim(), port: 9100, paperWidth: 32, viaAgent: true, cashDrawer: true }),
                     });
-                    toast("Printer set via shop agent (DigitalOcean)");
+                    toast("Printer set via shop agent (drawer kick on)");
                     void load();
                   } catch (err) {
                     toast(err instanceof Error ? err.message : "Could not save printer", "err");
@@ -385,19 +385,22 @@ function PrinterCard({
   const [connection, setConnection] = useState(printer.connection);
   const [host, setHost] = useState(printer.host);
   const [port, setPort] = useState(String(printer.port || 9100));
+  const [cashDrawer, setCashDrawer] = useState(Boolean(printer.cashDrawerEnabled));
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setConnection(printer.connection);
     setHost(printer.host);
     setPort(String(printer.port || 9100));
-  }, [printer.connection, printer.host, printer.port]);
+    setCashDrawer(Boolean(printer.cashDrawerEnabled));
+  }, [printer.connection, printer.host, printer.port, printer.cashDrawerEnabled]);
 
   return (
     <div className="mt-4 rounded-2xl bg-ink-800 p-4 text-sm">
       <div className="display text-lg">{printer.name}</div>
       <div className="text-cream-100/50">
         {printer.type === "kitchen" ? "Kitchen tickets" : "Bills / receipts"} · {printer.connection}
+        {printer.cashDrawerEnabled ? " · drawer kick on" : ""}
       </div>
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         <select value={connection} onChange={(e) => setConnection(e.target.value)} className="rounded-xl bg-ink-900 px-3 py-2">
@@ -422,6 +425,12 @@ function PrinterCard({
           </>
         )}
       </div>
+      {printer.type === "receipt" && (
+        <label className="mt-2 flex items-center gap-2 text-cream-100/70">
+          <input type="checkbox" checked={cashDrawer} onChange={(e) => setCashDrawer(e.target.checked)} />
+          Open cash drawer on checkout (printer DK port)
+        </label>
+      )}
       <div className="mt-2 flex flex-wrap gap-2">
         <button
           type="button"
@@ -435,6 +444,7 @@ function PrinterCard({
                   connection,
                   host,
                   port: Number(port || 0),
+                  cashDrawerEnabled: printer.type === "receipt" ? cashDrawer : false,
                   active: true,
                 }),
               });
