@@ -1,5 +1,6 @@
 import { getSettingsMap } from "./db.ts";
 import { formatMoney } from "./currency.ts";
+import { businessDate, dateKey, fromWallTime, hoursFromSettings, wallTime } from "./hours.ts";
 import { buildReport, type BuiltReport } from "./reports.ts";
 
 export type AskMessage = { role: "user" | "assistant"; content: string };
@@ -25,14 +26,6 @@ export type AskFacts = {
   year: CompactPeriod;
 };
 
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-function isoDay(d: Date) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 function compact(report: BuiltReport): CompactPeriod {
   return {
     label: report.label,
@@ -48,19 +41,21 @@ function compact(report: BuiltReport): CompactPeriod {
 }
 
 export async function loadAskFacts(): Promise<AskFacts> {
-  const now = new Date();
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
   const settings = await getSettingsMap();
-  const [today, yday, month, year] = await Promise.all([
-    buildReport({ period: "day", date: isoDay(now) }),
-    buildReport({ period: "day", date: isoDay(yesterday) }),
-    buildReport({ period: "month", month: String(now.getMonth() + 1), year: String(now.getFullYear()) }),
-    buildReport({ period: "year", year: String(now.getFullYear()) }),
+  const hours = hoursFromSettings(settings);
+  const today = businessDate(new Date(), hours);
+  const ydayWall = wallTime(new Date(fromWallTime(today.year, today.month, today.day, 12).getTime() - 24 * 60 * 60 * 1000));
+  const yesterday = dateKey(ydayWall.year, ydayWall.month, ydayWall.day);
+  const [todayReport, yday, month, year] = await Promise.all([
+    buildReport({ period: "day", date: today.key }),
+    buildReport({ period: "day", date: yesterday }),
+    buildReport({ period: "month", month: String(today.month), year: String(today.year) }),
+    buildReport({ period: "year", year: String(today.year) }),
   ]);
   return {
     restaurant: settings.restaurantName || "4 Corner Bar & Restaurant",
     currency: settings.currency || "฿",
-    today: compact(today),
+    today: compact(todayReport),
     yesterday: compact(yday),
     month: compact(month),
     year: compact(year),

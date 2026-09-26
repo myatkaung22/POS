@@ -12,6 +12,18 @@ export type PeriodQuery = {
   year?: string;
 };
 
+export type WallTime = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+/** Sales day and clock windows are always Thailand time, not the server clock. */
+export const BUSINESS_TZ = "Asia/Bangkok";
+
 function clampHour(n: number, fallback: number) {
   if (!Number.isFinite(n)) return fallback;
   return Math.min(23, Math.max(0, Math.trunc(n)));
@@ -40,27 +52,78 @@ export function parseDateKey(value?: string | null) {
   return null;
 }
 
-/** Calendar date that owns this timestamp's sales day (2 PM–2 AM wraps midnight). */
-export function businessDate(when: Date, hours: HoursConfig) {
-  const d = new Date(when);
-  if (hours.startHour > hours.endHour && d.getHours() < hours.endHour) {
-    d.setDate(d.getDate() - 1);
-  }
+export function wallTime(when: Date, timeZone = BUSINESS_TZ): WallTime {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = Object.fromEntries(
+    fmt.formatToParts(when).filter((p) => p.type !== "literal").map((p) => [p.type, p.value])
+  );
   return {
-    year: d.getFullYear(),
-    month: d.getMonth() + 1,
-    day: d.getDate(),
-    key: dateKey(d.getFullYear(), d.getMonth() + 1, d.getDate()),
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
   };
 }
 
+/** Wall-clock time in Asia/Bangkok → UTC Date. Independent of process timezone. */
+export function fromWallTime(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+  ms = 0,
+  timeZone = BUSINESS_TZ
+) {
+  let utc = Date.UTC(year, month - 1, day, hour, minute, second, ms);
+  for (let i = 0; i < 3; i++) {
+    const got = wallTime(new Date(utc), timeZone);
+    const gotUtc = Date.UTC(got.year, got.month - 1, got.day, got.hour, got.minute, got.second, ms);
+    const wantUtc = Date.UTC(year, month - 1, day, hour, minute, second, ms);
+    const delta = wantUtc - gotUtc;
+    if (delta === 0) break;
+    utc += delta;
+  }
+  return new Date(utc);
+}
+
+function addCalendarDays(year: number, month: number, day: number, delta: number) {
+  const noon = fromWallTime(year, month, day, 12);
+  const shifted = new Date(noon.getTime() + delta * 24 * 60 * 60 * 1000);
+  const w = wallTime(shifted);
+  return { year: w.year, month: w.month, day: w.day };
+}
+
+/** Calendar date that owns this timestamp's sales day (2 PM–2 AM wraps midnight). */
+export function businessDate(when: Date, hours: HoursConfig) {
+  const w = wallTime(when);
+  if (hours.startHour > hours.endHour && w.hour < hours.endHour) {
+    const prev = addCalendarDays(w.year, w.month, w.day, -1);
+    return { ...prev, key: dateKey(prev.year, prev.month, prev.day) };
+  }
+  return { year: w.year, month: w.month, day: w.day, key: dateKey(w.year, w.month, w.day) };
+}
+
 export function businessDayBounds(year: number, month: number, day: number, hours: HoursConfig) {
-  const start = new Date(year, month - 1, day, hours.startHour, 0, 0, 0);
+  const start = fromWallTime(year, month, day, hours.startHour);
   let end: Date;
   if (hours.startHour >= hours.endHour) {
-    end = new Date(year, month - 1, day + 1, hours.endHour, 0, 0, 0);
+    const next = addCalendarDays(year, month, day, 1);
+    end = fromWallTime(next.year, next.month, next.day, hours.endHour);
   } else {
-    end = new Date(year, month - 1, day, hours.endHour, 0, 0, 0);
+    end = fromWallTime(year, month, day, hours.endHour);
   }
   return { start, end };
 }
@@ -69,9 +132,9 @@ export function hourBuckets(start: Date, end: Date) {
   const buckets: { key: string; label: string }[] = [];
   const cursor = new Date(start);
   while (cursor < end) {
-    const hour = cursor.getHours();
+    const hour = wallTime(cursor).hour;
     buckets.push({ key: `${hour}:00`, label: `${padHour(hour)}:00` });
-    cursor.setHours(cursor.getHours() + 1);
+    cursor.setTime(cursor.getTime() + 60 * 60 * 1000);
   }
   return buckets;
 }

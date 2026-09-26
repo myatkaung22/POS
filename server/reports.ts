@@ -1,12 +1,14 @@
 import ExcelJS from "exceljs";
 import { getSettingsMap, prisma } from "./db.ts";
 import {
+  BUSINESS_TZ,
   businessDate,
   dateKey,
   hourBuckets,
   hoursFromSettings,
   padHour,
   periodBounds as hoursPeriodBounds,
+  wallTime,
   type HoursConfig,
 } from "./hours.ts";
 
@@ -167,7 +169,10 @@ export async function buildReport(query: ReportQuery): Promise<BuiltReport> {
   }
   function seriesKey(when: Date) {
     const biz = businessDate(when, hours);
-    if (bounds.period === "day") return { key: `${when.getHours()}:00`, label: `${padHour(when.getHours())}:00` };
+    if (bounds.period === "day") {
+      const hour = wallTime(when).hour;
+      return { key: `${hour}:00`, label: `${padHour(hour)}:00` };
+    }
     if (bounds.period === "year") {
       const key = `${biz.year}-${padHour(biz.month)}`;
       return { key, label: key };
@@ -241,7 +246,7 @@ export async function buildReport(query: ReportQuery): Promise<BuiltReport> {
     hours,
     orders: matchingOrders.map((o) => ({
       orderNo: o.orderNo,
-      when: (o.completedAt || o.createdAt).toLocaleString(),
+      when: (o.completedAt || o.createdAt).toLocaleString("en-GB", { timeZone: BUSINESS_TZ }),
       type: o.type,
       table: o.table ? `T${o.table.number}` : "",
       payment: o.payments.length ? o.payments.map((p) => p.method).join("+") : o.paymentMethod || "",
@@ -288,8 +293,8 @@ export async function buildReportWorkbook(report: BuiltReport, restaurant: strin
   summary.addRows([
     { field: "Restaurant", value: restaurant },
     { field: "Period", value: `${report.period} · ${report.label}` },
-    { field: "From", value: report.start.toLocaleString() },
-    { field: "To", value: report.end.toLocaleString() },
+    { field: "From", value: report.start.toLocaleString("en-GB", { timeZone: BUSINESS_TZ }) },
+    { field: "To", value: report.end.toLocaleString("en-GB", { timeZone: BUSINESS_TZ }) },
     {
       field: "Sales day",
       value: `${padHour(report.hours.startHour)}:00 – ${padHour(report.hours.endHour)}:00`,

@@ -5,7 +5,7 @@ import { api, downloadFile } from "../api";
 import { money, DEFAULT_CURRENCY } from "../types";
 import { useAuth } from "../auth";
 import { toast } from "../components/Toast";
-import { businessDateIso, hourLabel } from "../hours";
+import { businessDateIso, businessMonthYear, hourLabel } from "../hours";
 
 type Period = "day" | "month" | "year";
 
@@ -38,15 +38,15 @@ export function ReportsPage() {
   const endHour = Number(settings.dayEndHour || 2);
   const [period, setPeriod] = useState<Period>("day");
   const [date, setDate] = useState(() => businessDateIso(new Date(), startHour, endHour));
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [month, setMonth] = useState(() => businessMonthYear(new Date(), startHour, endHour).month);
+  const [year, setYear] = useState(() => businessMonthYear(new Date(), startHour, endHour).year);
   const [category, setCategory] = useState("");
   const [data, setData] = useState<Report | null>(null);
   const [busy, setBusy] = useState(false);
   const currency = settings.currency || DEFAULT_CURRENCY;
 
   const years = useMemo(() => {
-    const y = new Date().getFullYear();
+    const y = businessMonthYear().year;
     const list = [];
     for (let n = y; n >= y - 5; n--) list.push(n);
     return list;

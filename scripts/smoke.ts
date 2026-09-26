@@ -284,9 +284,15 @@ async function main() {
     }
     const start = new Date(report.start);
     const end = new Date(report.end);
-    if (start.getHours() !== 14) throw new Error(`start hour ${start.getHours()}`);
-    if (end.getHours() !== 2) throw new Error(`end hour ${end.getHours()}`);
-    return `${start.toLocaleString()} → ${end.toLocaleString()}`;
+    const bangkokHour = (when: Date) =>
+      Number(
+        new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Bangkok", hour: "2-digit", hourCycle: "h23" }).format(when)
+      );
+    if (bangkokHour(start) !== 14) throw new Error(`start hour ${bangkokHour(start)}`);
+    if (bangkokHour(end) !== 2) throw new Error(`end hour ${bangkokHour(end)}`);
+    const spanH = (end.getTime() - start.getTime()) / 3600000;
+    if (spanH !== 12) throw new Error(`span ${spanH}h`);
+    return `${start.toLocaleString("en-GB", { timeZone: "Asia/Bangkok" })} → ${end.toLocaleString("en-GB", { timeZone: "Asia/Bangkok" })}`;
   });
 
   await check("Bill print can run twice", async () => {
