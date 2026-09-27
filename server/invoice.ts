@@ -54,6 +54,7 @@ export function buildOrderSlipText(order: FullOrder, settings: Record<string, st
       footer: settings.footerNote || "Thank you for visiting 4 Corner.",
       width,
       decimals,
+      note: order.customerNote,
     });
   }
   return buildBillSlip({
@@ -78,6 +79,7 @@ export function buildOrderSlipText(order: FullOrder, settings: Record<string, st
     footer: settings.footerNote || "Please pay at cashier",
     width,
     decimals,
+    note: order.customerNote,
   });
 }
 

@@ -3,7 +3,7 @@ import { api } from "../api";
 import { getSocket } from "../socket";
 import type { Order } from "../types";
 import { toast } from "../components/Toast";
-import { printSlip } from "../printSlip";
+import { notifyStationPrint } from "../printSlip";
 import { useActionQueue } from "../actionQueue";
 
 export function KitchenPage() {
@@ -98,12 +98,11 @@ export function KitchenPage() {
               disabled={busy(`kitchen-print:${order.id}`)}
               onClick={() =>
                 void run(`kitchen-print:${order.id}`, `Printing kitchen #${order.orderNo}`, async () => {
-                  const data = await api<{ content: string; print?: { status: string } }>(
+                  const data = await api<{ content: string; print?: { status: string }; slips?: { station: string }[] }>(
                     `/api/orders/${order.id}/print-kitchen`,
                     { method: "POST" }
                   );
-                  if (data.print?.status !== "printed") void printSlip(`Kitchen #${order.orderNo}`, data.content);
-                  toast(data.print?.status === "printed" ? "Kitchen slip printed" : "Kitchen slip ready to print");
+                  notifyStationPrint(data.print, data.slips, "Reprint");
                 })
               }
               className="rounded-2xl bg-white/5 py-2 disabled:opacity-40"

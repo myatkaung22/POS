@@ -4,7 +4,10 @@ import { currencySymbol } from "./currency.ts";
 export const prisma = new PrismaClient();
 
 export const orderInclude = {
-  items: { orderBy: { createdAt: "asc" as const } },
+  items: {
+    orderBy: { createdAt: "asc" as const },
+    include: { menuItem: { include: { category: { select: { id: true, name: true } } } } },
+  },
   payments: { orderBy: { createdAt: "asc" as const } },
   table: true,
   waiter: { select: { id: true, name: true, role: true } },

@@ -6,6 +6,7 @@ import { toast } from "../components/Toast";
 import { money } from "../types";
 import { useAuth } from "../auth";
 import { DishPhoto } from "../components/DishPhoto";
+import { isDrinkCategory } from "../stations";
 
 const emptyItem = {
   name: "",
@@ -59,9 +60,14 @@ export function MenuPage() {
     setEditorOpen(false);
   }
 
+  function kitchenPrintFor(categoryId: string) {
+    return !isDrinkCategory(categories.find((c) => c.id === categoryId)?.name);
+  }
+
   function startCreate() {
     clearImagePreview();
-    setForm({ ...emptyItem, categoryId: form.categoryId || categories[0]?.id || "" });
+    const categoryId = form.categoryId || categories[0]?.id || "";
+    setForm({ ...emptyItem, categoryId, kitchenPrint: kitchenPrintFor(categoryId) });
     setEditing(null);
     setImageFile(null);
     setImagePreview("");
@@ -243,7 +249,9 @@ export function MenuPage() {
             <div className="space-y-2">
               <select
                 value={form.categoryId}
-                onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, categoryId: e.target.value, kitchenPrint: kitchenPrintFor(e.target.value) })
+                }
                 className="w-full rounded-2xl bg-ink-800 px-3 py-2"
               >
                 <option value="">Category</option>

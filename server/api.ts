@@ -5,7 +5,8 @@ import { prisma, getSettingsMap, nextOrderNo, orderInclude } from "./db.ts";
 import { authRequired, findUserForLogin, requirePermission, signToken } from "./auth.ts";
 import { calcPricing, billDecimals, withBillRounding } from "./pricing.ts";
 import { buildInvoicePdf, buildOrderSlipText } from "./invoice.ts";
-import { buildCancelSlip, buildKitchenSlip, buildReceiptSlip, discoverNetworkPrinters, kickCashDrawer, printToPrinter, slipDateTime, slipWidth } from "./printer.ts";
+import { buildReceiptSlip, discoverNetworkPrinters, kickCashDrawer, printStationSlips, printToPrinter, slipDateTime, slipWidth } from "./printer.ts";
+import { isDrinkCategory, isDrinkItem, splitByStation } from "./stations.ts";
 import { listWindowsPrinters, paperWidthForPrinter } from "./windows-print.ts";
 import { agentHeartbeat, claimNextAgentJob, completeAgentJob, printAgentConfigured, printAgentRequired } from "./print-agent.ts";
 import { emitAll, pushInbox } from "./realtime.ts";
@@ -132,6 +133,12 @@ function occupancyFromOrder(order?: { status: string; items?: { status: string }
   return "available";
 }
 
+function occupancyFromOrders(orders: { status: string; items?: { status: string }[] }[]) {
+  if (orders.some((order) => order.status === "billed")) return "billing";
+  if (orders.some((order) => occupancyFromOrder(order) === "occupied")) return "occupied";
+  return "available";
+}
+
 async function syncTableStatus(tableId?: string | null) {
   if (!tableId) return;
   const open = await prisma.order.findFirst({
@@ -165,6 +172,15 @@ function kitchenTableLabel(order: {
 
 function itemWasInKitchen(item: { status: string; kitchenPrinted?: boolean }) {
   return Boolean(item.kitchenPrinted) || ["sent", "preparing", "ready", "served"].includes(item.status);
+}
+
+function slipLines(items: { qty: number; name: string; notes?: string | null; diner?: string | null }[]) {
+  return items.map((item) => ({
+    qty: item.qty,
+    name: item.name,
+    notes: item.notes || "",
+    diner: item.diner || "",
+  }));
 }
 
 export function registerRoutes(app: Express) {
@@ -362,6 +378,7 @@ export function registerRoutes(app: Express) {
 
   app.post("/api/menu-items", authRequired, requirePermission("menu"), withMenuImage, asyncHandler(async (req, res) => {
     const file = (req as Request & { file?: Express.Multer.File }).file;
+    const category = await prisma.category.findUnique({ where: { id: String(req.body.categoryId) } });
     const item = await prisma.menuItem.create({
       data: {
         categoryId: String(req.body.categoryId),
@@ -371,7 +388,7 @@ export function registerRoutes(app: Express) {
         emoji: req.body.emoji || "🍽️",
         sku: req.body.sku || "",
         available: asBool(req.body.available, true),
-        kitchenPrint: asBool(req.body.kitchenPrint, true),
+        kitchenPrint: asBool(req.body.kitchenPrint, !isDrinkCategory(category?.name)),
         sortOrder: req.body.sortOrder !== undefined && req.body.sortOrder !== "" ? Number(req.body.sortOrder) : 0,
         imageUrl: file ? publicImageUrl(file.filename) : "",
       },
@@ -430,11 +447,10 @@ export function registerRoutes(app: Express) {
           where: { status: { in: ["open", "in_kitchen", "billed"] } },
           include: { items: true },
           orderBy: { createdAt: "desc" },
-          take: 1,
         },
       },
     });
-    res.json(tables.map((table) => ({ ...table, status: occupancyFromOrder(table.orders[0]) })));
+    res.json(tables.map((table) => ({ ...table, status: occupancyFromOrders(table.orders) })));
   }));
 
   app.post("/api/tables", authRequired, requirePermission("settings"), asyncHandler(async (req, res) => {
@@ -703,6 +719,16 @@ export function registerRoutes(app: Express) {
       orderBy: { createdAt: "desc" },
       take: Number(req.query.take || 100),
     });
+    if (kitchen) {
+      const foodOnly = orders
+        .map((order) => ({
+          ...order,
+          items: order.items.filter((item) => !isDrinkItem(item)),
+        }))
+        .filter((order) => order.items.some((item) => ["sent", "preparing", "ready"].includes(item.status)));
+      res.json(foodOnly);
+      return;
+    }
     res.json(orders);
   }));
 
@@ -713,6 +739,64 @@ export function registerRoutes(app: Express) {
       return;
     }
     res.json(order);
+  }));
+
+  app.post("/api/orders/:id/change-table", authRequired, requirePermission("pos"), asyncHandler(async (req, res) => {
+    const destId = String((req.body as { tableId?: string })?.tableId || "").trim();
+    if (!destId) {
+      res.status(400).json({ error: "Choose a table" });
+      return;
+    }
+    const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude });
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+    if (["completed", "cancelled"].includes(order.status)) {
+      res.status(400).json({ error: "This ticket cannot move" });
+      return;
+    }
+    if (order.type !== "dine_in" || !order.tableId) {
+      res.status(400).json({ error: "Only dine-in tickets can change table" });
+      return;
+    }
+    if (order.tableId === destId) {
+      res.json(order);
+      return;
+    }
+    const dest = await prisma.diningTable.findUnique({ where: { id: destId } });
+    if (!dest) {
+      res.status(404).json({ error: "Table not found" });
+      return;
+    }
+    const destOrders = await prisma.order.findMany({
+      where: { tableId: destId, status: { in: ["open", "in_kitchen", "billed"] } },
+      include: { items: true },
+    });
+    const busy = destOrders.filter((row) => {
+      const live = row.items.filter((item) => item.status !== "cancelled");
+      return live.length > 0 || row.status !== "open";
+    });
+    if (busy.length) {
+      res.status(400).json({ error: `Table ${dest.number} is occupied` });
+      return;
+    }
+    for (const empty of destOrders) {
+      await prisma.order.update({
+        where: { id: empty.id },
+        data: { status: "cancelled", completedAt: new Date(), tableId: null },
+      });
+    }
+    const fromId = order.tableId;
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: { tableId: destId, type: "dine_in" },
+      include: orderInclude,
+    });
+    await syncTableStatus(fromId);
+    await syncTableStatus(destId);
+    emitAll("order:updated", updated);
+    res.json(updated);
   }));
 
   app.post("/api/orders", authRequired, requirePermission("pos"), asyncHandler(async (req, res) => {
@@ -881,7 +965,7 @@ export function registerRoutes(app: Express) {
     const payload = await runSerial(`kitchen-send:${req.params.id}`, async () => {
       const order = await prisma.order.findUnique({
         where: { id: req.params.id },
-        include: { items: { include: { menuItem: true } }, table: true },
+        include: { items: { include: { menuItem: { include: { category: { select: { name: true } } } } } }, table: true },
       });
       if (!order) throw Object.assign(new Error("Order not found"), { status: 404 });
       const pending = order.items.filter((i) => i.status === "pending");
@@ -904,38 +988,26 @@ export function registerRoutes(app: Express) {
       const followUp = order.items.some(
         (i) => i.status !== "pending" && i.status !== "cancelled" && (i.kitchenPrinted || ["sent", "preparing", "ready", "served"].includes(i.status))
       );
-      const printItems = pending.filter((i) => i.menuItem?.kitchenPrint !== false);
-      const content = buildKitchenSlip({
+      const stations = splitByStation(pending);
+      const printed = await printStationSlips({
         restaurant: settings.restaurantName || "4 Corner Bar & Restaurant",
         orderNo: order.orderNo,
-        tableLabel: order.table
-          ? `Table ${order.table.number} ${order.table.name}`
-          : order.type === "delivery"
-            ? "DELIVERY"
-            : order.type === "takeaway"
-              ? "TAKEAWAY"
-              : order.type,
+        tableLabel: kitchenTableLabel(order),
         type: order.type,
         note: [order.customerNote, guestBits].filter(Boolean).join(" | "),
-        items: printItems.map((i) => ({ qty: i.qty, name: i.name, notes: i.notes, diner: i.diner })),
+        kitchenItems: slipLines(stations.kitchen),
+        drinkItems: slipLines(stations.drinks),
         width,
         addon: followUp,
       });
-      const print = printItems.length
-        ? await printToPrinter({
-            printerType: "kitchen",
-            title: followUp ? `Kitchen #${order.orderNo} add-on` : `Kitchen #${order.orderNo}`,
-            content,
-          })
-        : { status: "skipped" };
       const updated = await prisma.order.findUnique({
         where: { id: order.id },
         include: orderInclude,
       });
       emitAll("order:updated", updated);
-      emitAll("kitchen:ticket", { order: updated, items: pending, print });
+      emitAll("kitchen:ticket", { order: updated, items: pending, print: printed.print });
       await syncTableStatus(order.tableId);
-      return { order: updated, print, content };
+      return { order: updated, print: printed.print, content: printed.content, slips: printed.slips };
     });
     res.json(payload);
   }));
@@ -1008,41 +1080,32 @@ export function registerRoutes(app: Express) {
   app.post("/api/orders/:id/print-kitchen", authRequired, asyncHandler(async (req, res) => {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
-      include: { items: { include: { menuItem: true } }, table: true },
+      include: { items: { include: { menuItem: { include: { category: { select: { name: true } } } } } }, table: true },
     });
     if (!order) {
       res.status(404).json({ error: "Order not found" });
       return;
     }
     const items = order.items.filter((i) => i.status !== "cancelled" && i.status !== "pending" && i.status !== "served");
-    if (!items.length) {
+    const stations = splitByStation(items);
+    if (!stations.kitchen.length && !stations.drinks.length) {
       res.status(400).json({ error: "No kitchen items to print" });
       return;
     }
     const settings = await getSettingsMap();
     const width = await slipWidth("kitchen");
     const guestBits = [order.customerName, order.customerPhone, order.deliveryAddress].filter(Boolean).join(" · ");
-    const content = buildKitchenSlip({
+    const printed = await printStationSlips({
       restaurant: settings.restaurantName || "4 Corner Bar & Restaurant",
       orderNo: order.orderNo,
-      tableLabel: order.table
-        ? `Table ${order.table.number} ${order.table.name}`
-        : order.type === "delivery"
-          ? "DELIVERY"
-          : order.type === "takeaway"
-            ? "TAKEAWAY"
-            : order.type,
+      tableLabel: kitchenTableLabel(order),
       type: order.type,
       note: [order.customerNote, guestBits].filter(Boolean).join(" | "),
-      items: items.map((i) => ({ qty: i.qty, name: i.name, notes: i.notes, diner: i.diner })),
+      kitchenItems: slipLines(stations.kitchen),
+      drinkItems: slipLines(stations.drinks),
       width,
     });
-    const print = await printToPrinter({
-      printerType: "kitchen",
-      title: `Kitchen #${order.orderNo}`,
-      content,
-    });
-    res.json({ print, content });
+    res.json({ print: printed.print, content: printed.content, slips: printed.slips });
   }));
 
   app.get("/api/orders/:id/invoice.pdf", authRequired, requirePermission("orders"), asyncHandler(async (req, res) => {
@@ -1129,6 +1192,7 @@ export function registerRoutes(app: Express) {
       footer: settings.footerNote || "Thank you",
       width,
       decimals,
+      note: updated.customerNote,
     });
     const print = await printToPrinter({
       printerType: "receipt",
@@ -1219,39 +1283,31 @@ export function registerRoutes(app: Express) {
     await syncTableStatus(updated.tableId);
     const settings = await getSettingsMap();
     const width = await slipWidth("kitchen");
-    const slipItems = (kitchenItems.length ? kitchenItems : live).map((i) => ({
-      qty: i.qty,
-      name: i.name,
-      notes: i.notes,
-      diner: i.diner,
-    }));
-    let print = null;
-    let content = "";
-    if (slipItems.length) {
-      content = buildCancelSlip({
-        restaurant: settings.restaurantName || "4 Corner Bar & Restaurant",
-        orderNo: order.orderNo,
-        tableLabel: kitchenTableLabel(order),
-        type: order.type,
-        note: [order.customerName, order.customerPhone, order.deliveryAddress].filter(Boolean).join(" · "),
-        items: slipItems,
-        width,
-        scope: "order",
-      });
-      print = await printToPrinter({
-        printerType: "kitchen",
-        title: `Cancel #${order.orderNo}`,
-        content,
-      });
-    }
+    const toPrint = kitchenItems.length ? kitchenItems : live;
+    const stations = splitByStation(toPrint);
+    const printed =
+      stations.kitchen.length || stations.drinks.length
+        ? await printStationSlips({
+            restaurant: settings.restaurantName || "4 Corner Bar & Restaurant",
+            orderNo: order.orderNo,
+            tableLabel: kitchenTableLabel(order),
+            type: order.type,
+            note: [order.customerName, order.customerPhone, order.deliveryAddress].filter(Boolean).join(" · "),
+            kitchenItems: slipLines(stations.kitchen),
+            drinkItems: slipLines(stations.drinks),
+            width,
+            kind: "cancel",
+            cancelScope: "order",
+          })
+        : { print: null, content: "", slips: [] };
     emitAll("order:updated", updated);
-    res.json({ order: updated, print, content });
+    res.json({ order: updated, print: printed.print, content: printed.content, slips: printed.slips });
   }));
 
   app.post("/api/orders/:id/items/:itemId/cancel", authRequired, requirePermission("pos"), asyncHandler(async (req, res) => {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
-      include: { items: true, table: true },
+      include: { items: { include: { menuItem: { include: { category: { select: { name: true } } } } } }, table: true },
     });
     if (!order || ["paid", "completed", "cancelled"].includes(order.status)) {
       res.status(400).json({ error: "Order cannot be changed" });
@@ -1282,23 +1338,21 @@ export function registerRoutes(app: Express) {
     await syncTableStatus(order.tableId);
     const settings = await getSettingsMap();
     const width = await slipWidth("kitchen");
-    const content = buildCancelSlip({
+    const drink = isDrinkItem(item);
+    const printed = await printStationSlips({
       restaurant: settings.restaurantName || "4 Corner Bar & Restaurant",
       orderNo: order.orderNo,
       tableLabel: kitchenTableLabel(order),
       type: order.type,
-      note: remaining === 0 ? "Order cleared · table free" : undefined,
-      items: [{ qty: item.qty, name: item.name, notes: item.notes, diner: item.diner }],
+      note: remaining === 0 ? "Order cleared · table free" : "",
+      kitchenItems: drink ? [] : slipLines([item]),
+      drinkItems: drink ? slipLines([item]) : [],
       width,
-      scope: remaining === 0 ? "order" : "item",
-    });
-    const print = await printToPrinter({
-      printerType: "kitchen",
-      title: `Cancel item #${order.orderNo}`,
-      content,
+      kind: "cancel",
+      cancelScope: remaining === 0 ? "order" : "item",
     });
     emitAll("order:updated", updated);
-    res.json({ order: updated, print, content });
+    res.json({ order: updated, print: printed.print, content: printed.content, slips: printed.slips });
   }));
 
   app.get("/api/promotions", authRequired, asyncHandler(async (_req, res) => {

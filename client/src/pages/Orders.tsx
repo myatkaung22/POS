@@ -3,8 +3,7 @@ import { api } from "../api";
 import { getSocket } from "../socket";
 import { money, type Order } from "../types";
 import { useAuth } from "../auth";
-import { toast } from "../components/Toast";
-import { printSlip } from "../printSlip";
+import { notifySlipPrint } from "../printSlip";
 import { useActionQueue } from "../actionQueue";
 
 export function OrdersPage() {
@@ -60,10 +59,7 @@ export function OrdersPage() {
                           `/api/orders/${o.id}/bill`,
                           { method: "POST" }
                         );
-                        if (data.print?.status !== "printed") {
-                          void printSlip(`${o.paidAmount ? "Receipt" : "Bill"} #${o.orderNo}`, data.content);
-                        }
-                        toast(data.print?.status === "printed" ? "Slip printed" : "Slip ready to print");
+                        notifySlipPrint(data.print, "Slip printed", "Slip sent · printer not ready");
                       })
                     }
                     className="rounded-xl bg-white/5 px-3 py-1 disabled:opacity-40"

@@ -66,6 +66,7 @@ export type OrderItem = {
   diner?: string;
   status: string;
   kitchenPrinted: boolean;
+  menuItem?: { category?: { id?: string; name?: string } | null } | null;
 };
 
 export function dinerLabel(name?: string | null) {

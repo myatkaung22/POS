@@ -9,7 +9,7 @@
         {
           "name": "Fried Chicken Ball",
           "description": "",
-          "price": 119.0,
+          "price": 119,
           "sku": "A-01",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -17,7 +17,7 @@
         {
           "name": "Fried Pork Ball",
           "description": "",
-          "price": 139.0,
+          "price": 139,
           "sku": "A-02",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -25,7 +25,7 @@
         {
           "name": "Fried Chicken Wings",
           "description": "",
-          "price": 139.0,
+          "price": 139,
           "sku": "A-03",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -33,7 +33,7 @@
         {
           "name": "Fried Chicken Tendon",
           "description": "",
-          "price": 119.0,
+          "price": 119,
           "sku": "A-04",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -41,7 +41,7 @@
         {
           "name": "Fried Chicken Skin",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "A-05",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -49,7 +49,7 @@
         {
           "name": "Grilled Pork Neck",
           "description": "",
-          "price": 159.0,
+          "price": 159,
           "sku": "A-06",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -57,7 +57,7 @@
         {
           "name": "Fried Pork Ribs",
           "description": "",
-          "price": 149.0,
+          "price": 149,
           "sku": "A-07",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -65,7 +65,7 @@
         {
           "name": "Steamed Pork with Salted egg",
           "description": "",
-          "price": 179.0,
+          "price": 179,
           "sku": "A-08",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -73,7 +73,7 @@
         {
           "name": "Chicken Satay",
           "description": "",
-          "price": 110.0,
+          "price": 110,
           "sku": "A-09",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -81,7 +81,7 @@
         {
           "name": "Pork Satay",
           "description": "",
-          "price": 130.0,
+          "price": 130,
           "sku": "A-10",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -89,7 +89,7 @@
         {
           "name": "Fried Secame Pork",
           "description": "",
-          "price": 150.0,
+          "price": 150,
           "sku": "A-11",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -97,7 +97,7 @@
         {
           "name": "Beef",
           "description": "",
-          "price": 180.0,
+          "price": 180,
           "sku": "A-12",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -105,7 +105,7 @@
         {
           "name": "Fish & Chip",
           "description": "",
-          "price": 179.0,
+          "price": 179,
           "sku": "A-13",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -113,7 +113,7 @@
         {
           "name": "Pounded Dry Mutton With Tea Leaf",
           "description": "",
-          "price": 179.0,
+          "price": 179,
           "sku": "A-14",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -121,7 +121,7 @@
         {
           "name": "Omelette",
           "description": "",
-          "price": 79.0,
+          "price": 79,
           "sku": "A-15",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -129,7 +129,7 @@
         {
           "name": "Edamame",
           "description": "",
-          "price": 79.0,
+          "price": 79,
           "sku": "A-16",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -137,7 +137,7 @@
         {
           "name": "Crispy Fried Calamari",
           "description": "",
-          "price": 149.0,
+          "price": 149,
           "sku": "A-17",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -145,7 +145,7 @@
         {
           "name": "Samusa/Bayarkyaw",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "A-18",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -153,7 +153,7 @@
         {
           "name": "Gourd Fritters",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "A-19",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -161,7 +161,7 @@
         {
           "name": "Assorted Fritters (small)",
           "description": "",
-          "price": 119.0,
+          "price": 119,
           "sku": "A-20",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -169,7 +169,7 @@
         {
           "name": "Assorted Fritters (large)",
           "description": "",
-          "price": 159.0,
+          "price": 159,
           "sku": "A-21",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -177,7 +177,7 @@
         {
           "name": "Stir Fried Morning Glory",
           "description": "",
-          "price": 79.0,
+          "price": 79,
           "sku": "A-22",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -185,7 +185,7 @@
         {
           "name": "Stir Fried Morning Glory With Mushroom",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "A-23",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -193,7 +193,7 @@
         {
           "name": "Stri Fried Mixed Vegetables",
           "description": "",
-          "price": 99.0,
+          "price": 99,
           "sku": "A-24",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -201,7 +201,7 @@
         {
           "name": "Stir Fried Cauliflower with egg",
           "description": "",
-          "price": 99.0,
+          "price": 99,
           "sku": "A-25",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -209,7 +209,7 @@
         {
           "name": "Crispy Enoki Mushroom",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "A-26",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -217,7 +217,7 @@
         {
           "name": "Mashed Potato (Shan Style)",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "A-27",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -225,7 +225,7 @@
         {
           "name": "French Fries",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "A-28",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -233,7 +233,7 @@
         {
           "name": "Mala Fried Corn",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "A-29",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -241,7 +241,7 @@
         {
           "name": "Prawn Tempura",
           "description": "",
-          "price": 179.0,
+          "price": 179,
           "sku": "A-30",
           "emoji": "🥟",
           "kitchenPrint": true
@@ -256,7 +256,7 @@
         {
           "name": "Chicken Feet Salad",
           "description": "",
-          "price": 99.0,
+          "price": 99,
           "sku": "S-01",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -264,7 +264,7 @@
         {
           "name": "Chicken Salad",
           "description": "",
-          "price": 119.0,
+          "price": 119,
           "sku": "S-02",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -272,7 +272,7 @@
         {
           "name": "Raw Prawn Salad",
           "description": "",
-          "price": 179.0,
+          "price": 179,
           "sku": "S-03",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -280,7 +280,7 @@
         {
           "name": "Seafood Salad (Rakhine/Thai Style)",
           "description": "",
-          "price": 179.0,
+          "price": 179,
           "sku": "S-04",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -288,7 +288,7 @@
         {
           "name": "Myanmar Tea Leaf Salad",
           "description": "",
-          "price": 99.0,
+          "price": 99,
           "sku": "S-05",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -296,7 +296,7 @@
         {
           "name": "Chick Pea Salad",
           "description": "",
-          "price": 69.0,
+          "price": 69,
           "sku": "S-06",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -304,7 +304,7 @@
         {
           "name": "Century Egg Salad",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "S-07",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -312,7 +312,7 @@
         {
           "name": "Dried Anchovy Salad",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "S-08",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -320,7 +320,7 @@
         {
           "name": "White Fungus Salad",
           "description": "",
-          "price": 69.0,
+          "price": 69,
           "sku": "S-09",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -328,7 +328,7 @@
         {
           "name": "Papaya Salad (Thai Style)",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "S-10",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -336,7 +336,7 @@
         {
           "name": "Spicy Mango Salad",
           "description": "",
-          "price": 69.0,
+          "price": 69,
           "sku": "S-11",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -344,7 +344,7 @@
         {
           "name": "Tomato Salad",
           "description": "",
-          "price": 69.0,
+          "price": 69,
           "sku": "S-12",
           "emoji": "🥗",
           "kitchenPrint": true
@@ -359,7 +359,7 @@
         {
           "name": "Fried Noodle (Pork, Chicken)",
           "description": "",
-          "price": 100.0,
+          "price": 100,
           "sku": "MD-01",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -367,7 +367,7 @@
         {
           "name": "Fried Noodle (Seafood)",
           "description": "",
-          "price": 140.0,
+          "price": 140,
           "sku": "MD-02",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -375,7 +375,7 @@
         {
           "name": "Fried Vermicell (Pork, Chicken)",
           "description": "",
-          "price": 100.0,
+          "price": 100,
           "sku": "MD-03",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -383,7 +383,7 @@
         {
           "name": "Fried Vermicell (Seafood)",
           "description": "",
-          "price": 140.0,
+          "price": 140,
           "sku": "MD-04",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -391,7 +391,7 @@
         {
           "name": "Fried Rice (Pork, Chicken)",
           "description": "",
-          "price": 100.0,
+          "price": 100,
           "sku": "MD-05",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -399,7 +399,7 @@
         {
           "name": "Fried Rice (Seafood)",
           "description": "",
-          "price": 140.0,
+          "price": 140,
           "sku": "MD-06",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -407,7 +407,7 @@
         {
           "name": "Spicy Fried Rice (Pork, Chicken)",
           "description": "",
-          "price": 110.0,
+          "price": 110,
           "sku": "MD-07",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -415,7 +415,7 @@
         {
           "name": "Spicy Fried Rice (Seafood)",
           "description": "",
-          "price": 140.0,
+          "price": 140,
           "sku": "MD-08",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -423,7 +423,7 @@
         {
           "name": "Kimchi Fried Rice (Pork, Chicken)",
           "description": "",
-          "price": 140.0,
+          "price": 140,
           "sku": "MD-09",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -431,7 +431,7 @@
         {
           "name": "Kimchi Fried Rice (Seafood)",
           "description": "",
-          "price": 160.0,
+          "price": 160,
           "sku": "MD-10",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -439,7 +439,7 @@
         {
           "name": "Tea Leaf Rice Salad with Egg",
           "description": "",
-          "price": 109.0,
+          "price": 109,
           "sku": "MD-11",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -447,7 +447,7 @@
         {
           "name": "Dry and Spicy Fried Eel",
           "description": "",
-          "price": 180.0,
+          "price": 180,
           "sku": "MD-12",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -455,7 +455,7 @@
         {
           "name": "Beef Steak",
           "description": "",
-          "price": 250.0,
+          "price": 250,
           "sku": "MD-13",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -463,7 +463,7 @@
         {
           "name": "Grilled Chicken Thigh",
           "description": "",
-          "price": 199.0,
+          "price": 199,
           "sku": "MD-14",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -471,7 +471,7 @@
         {
           "name": "Chicken Korma",
           "description": "",
-          "price": 180.0,
+          "price": 180,
           "sku": "MD-15",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -479,7 +479,7 @@
         {
           "name": "Banger & Mash",
           "description": "",
-          "price": 180.0,
+          "price": 180,
           "sku": "MD-16",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -487,7 +487,7 @@
         {
           "name": "Grilled Seabass",
           "description": "",
-          "price": 180.0,
+          "price": 180,
           "sku": "MD-17",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -495,7 +495,7 @@
         {
           "name": "Pad Thai (Pork, Chicken)",
           "description": "",
-          "price": 99.0,
+          "price": 99,
           "sku": "MD-18",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -503,7 +503,7 @@
         {
           "name": "Pad Thai (Seafood)",
           "description": "",
-          "price": 129.0,
+          "price": 129,
           "sku": "MD-19",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -511,7 +511,7 @@
         {
           "name": "Spaghetti Meat Ball (Pork,Chicken)",
           "description": "",
-          "price": 180.0,
+          "price": 180,
           "sku": "MD-20",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -519,7 +519,7 @@
         {
           "name": "Spaghetti Meat Ball (Beef)",
           "description": "",
-          "price": 200.0,
+          "price": 200,
           "sku": "MD-21",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -527,7 +527,7 @@
         {
           "name": "Spaghetti Carbonara",
           "description": "",
-          "price": 180.0,
+          "price": 180,
           "sku": "MD-22",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -535,7 +535,7 @@
         {
           "name": "Spaghetti Marinara",
           "description": "",
-          "price": 200.0,
+          "price": 200,
           "sku": "MD-23",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -543,7 +543,7 @@
         {
           "name": "Steamed Rice",
           "description": "",
-          "price": 20.0,
+          "price": 20,
           "sku": "MD-24",
           "emoji": "🍽️",
           "kitchenPrint": true
@@ -558,7 +558,7 @@
         {
           "name": "Mon style fish soup",
           "description": "",
-          "price": 150.0,
+          "price": 150,
           "sku": "S-01",
           "emoji": "🍲",
           "kitchenPrint": true
@@ -566,7 +566,7 @@
         {
           "name": "Spicy pork ribs soup",
           "description": "",
-          "price": 160.0,
+          "price": 160,
           "sku": "S-02",
           "emoji": "🍲",
           "kitchenPrint": true
@@ -574,7 +574,7 @@
         {
           "name": "Chicken snezze wort soup",
           "description": "",
-          "price": 120.0,
+          "price": 120,
           "sku": "S-03",
           "emoji": "🍲",
           "kitchenPrint": true
@@ -582,7 +582,7 @@
         {
           "name": "Tom Yum Soup (Pork, Chicken)",
           "description": "",
-          "price": 130.0,
+          "price": 130,
           "sku": "S-04",
           "emoji": "🍲",
           "kitchenPrint": true
@@ -590,7 +590,7 @@
         {
           "name": "Tom Yum Soup (Seafood)",
           "description": "",
-          "price": 160.0,
+          "price": 160,
           "sku": "S-05",
           "emoji": "🍲",
           "kitchenPrint": true
@@ -605,7 +605,7 @@
         {
           "name": "Mala Xiang Guo (Pork, Chicken)",
           "description": "",
-          "price": 150.0,
+          "price": 150,
           "sku": "M-01",
           "emoji": "🌶️",
           "kitchenPrint": true
@@ -613,7 +613,7 @@
         {
           "name": "Mala Xiang Guo (Seafood)",
           "description": "",
-          "price": 180.0,
+          "price": 180,
           "sku": "M-02",
           "emoji": "🌶️",
           "kitchenPrint": true
@@ -621,7 +621,7 @@
         {
           "name": "Mala Grilled Fish",
           "description": "",
-          "price": 180.0,
+          "price": 180,
           "sku": "M-03",
           "emoji": "🌶️",
           "kitchenPrint": true
@@ -629,7 +629,7 @@
         {
           "name": "Mala Chicken Feet with Chinese Chives",
           "description": "",
-          "price": 150.0,
+          "price": 150,
           "sku": "M-04",
           "emoji": "🌶️",
           "kitchenPrint": true
@@ -644,7 +644,7 @@
         {
           "name": "Chicken Wings",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GC-01",
           "emoji": "🍗",
           "kitchenPrint": true
@@ -652,7 +652,7 @@
         {
           "name": "Chicken Thigh",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GC-02",
           "emoji": "🍗",
           "kitchenPrint": true
@@ -660,7 +660,7 @@
         {
           "name": "Chicken Liver",
           "description": "",
-          "price": 20.0,
+          "price": 20,
           "sku": "GC-03",
           "emoji": "🍗",
           "kitchenPrint": true
@@ -668,7 +668,7 @@
         {
           "name": "Chicken Gizzard",
           "description": "",
-          "price": 20.0,
+          "price": 20,
           "sku": "GC-04",
           "emoji": "🍗",
           "kitchenPrint": true
@@ -676,7 +676,7 @@
         {
           "name": "Chicken Butt",
           "description": "",
-          "price": 20.0,
+          "price": 20,
           "sku": "GC-05",
           "emoji": "🍗",
           "kitchenPrint": true
@@ -684,7 +684,7 @@
         {
           "name": "Chicken Skin",
           "description": "",
-          "price": 20.0,
+          "price": 20,
           "sku": "GC-06",
           "emoji": "🍗",
           "kitchenPrint": true
@@ -692,7 +692,7 @@
         {
           "name": "Chicken Tendon",
           "description": "",
-          "price": 20.0,
+          "price": 20,
           "sku": "GC-07",
           "emoji": "🍗",
           "kitchenPrint": true
@@ -707,7 +707,7 @@
         {
           "name": "Pork intestine",
           "description": "",
-          "price": 20.0,
+          "price": 20,
           "sku": "GP-01",
           "emoji": "🥓",
           "kitchenPrint": true
@@ -715,7 +715,7 @@
         {
           "name": "Pork Neck",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GP-02",
           "emoji": "🥓",
           "kitchenPrint": true
@@ -723,7 +723,7 @@
         {
           "name": "Pork Belly",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GP-03",
           "emoji": "🥓",
           "kitchenPrint": true
@@ -731,7 +731,7 @@
         {
           "name": "Pork Tongue",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GP-04",
           "emoji": "🥓",
           "kitchenPrint": true
@@ -739,7 +739,7 @@
         {
           "name": "Pork Roll With Enoki",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GP-05",
           "emoji": "🥓",
           "kitchenPrint": true
@@ -754,7 +754,7 @@
         {
           "name": "Beef Tenderloin",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GB-01",
           "emoji": "🥩",
           "kitchenPrint": true
@@ -762,7 +762,7 @@
         {
           "name": "Beef Tongue",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GB-02",
           "emoji": "🥩",
           "kitchenPrint": true
@@ -777,7 +777,7 @@
         {
           "name": "Tiger Prawn",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GS-01",
           "emoji": "🦐",
           "kitchenPrint": true
@@ -785,7 +785,7 @@
         {
           "name": "Squid",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "GS-02",
           "emoji": "🦐",
           "kitchenPrint": true
@@ -800,7 +800,7 @@
         {
           "name": "Lady Finger",
           "description": "",
-          "price": 10.0,
+          "price": 10,
           "sku": "GV-01",
           "emoji": "🥦",
           "kitchenPrint": true
@@ -808,7 +808,7 @@
         {
           "name": "Chive",
           "description": "",
-          "price": 10.0,
+          "price": 10,
           "sku": "GV-02",
           "emoji": "🥦",
           "kitchenPrint": true
@@ -816,7 +816,7 @@
         {
           "name": "Brocoli",
           "description": "",
-          "price": 10.0,
+          "price": 10,
           "sku": "GV-03",
           "emoji": "🥦",
           "kitchenPrint": true
@@ -824,7 +824,7 @@
         {
           "name": "Lotus Root",
           "description": "",
-          "price": 15.0,
+          "price": 15,
           "sku": "GV-04",
           "emoji": "🥦",
           "kitchenPrint": true
@@ -832,7 +832,7 @@
         {
           "name": "Gingo Nut",
           "description": "",
-          "price": 10.0,
+          "price": 10,
           "sku": "GV-05",
           "emoji": "🥦",
           "kitchenPrint": true
@@ -840,7 +840,7 @@
         {
           "name": "Enoki mushroom",
           "description": "",
-          "price": 10.0,
+          "price": 10,
           "sku": "GV-06",
           "emoji": "🥦",
           "kitchenPrint": true
@@ -848,7 +848,7 @@
         {
           "name": "Quail egg",
           "description": "",
-          "price": 10.0,
+          "price": 10,
           "sku": "GV-07",
           "emoji": "🥦",
           "kitchenPrint": true
@@ -856,7 +856,7 @@
         {
           "name": "Potato",
           "description": "",
-          "price": 10.0,
+          "price": 10,
           "sku": "GV-08",
           "emoji": "🥦",
           "kitchenPrint": true
@@ -864,14 +864,14 @@
       ]
     },
     {
-      "name": "Classic Cocktails",
+      "name": "Drink",
       "emoji": "🍹",
       "kitchenPrint": false,
       "items": [
         {
           "name": "Amaretto Sour",
           "description": "Amaretto, Lime, Egg White, Angostura Bitters",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-01",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -879,7 +879,7 @@
         {
           "name": "Basil Gimlet",
           "description": "Gin, Fresh Basil, Lime",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-02",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -887,7 +887,7 @@
         {
           "name": "Cosmopolitan",
           "description": "Vodka, Triple-sec, Cranberry",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-03",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -895,7 +895,7 @@
         {
           "name": "Godfather",
           "description": "Whiskey, Amaretto",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-04",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -903,7 +903,7 @@
         {
           "name": "Mexican Firing Squad",
           "description": "Tequila, Lime, Grenadine, Angostura Bitters",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-05",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -911,7 +911,7 @@
         {
           "name": "Mojito",
           "description": "Rum, Mint, Lime, Soda",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-06",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -919,7 +919,7 @@
         {
           "name": "Pink Lady",
           "description": "Gin, Grenadine, Lime, Egg White",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-07",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -927,7 +927,7 @@
         {
           "name": "Pornstar Martini",
           "description": "Vodka, Lime, Passionfruit Puree",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-08",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -935,7 +935,7 @@
         {
           "name": "Rum Sour",
           "description": "Rum, Angostura Bitters, Egg White, Lime",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-09",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -943,7 +943,7 @@
         {
           "name": "Tequila Sunrise",
           "description": "Tequila, Orange, Grenadine",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-10",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -951,7 +951,7 @@
         {
           "name": "WooWoo",
           "description": "Vodka, Peach, Cranberry",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-11",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -959,7 +959,7 @@
         {
           "name": "Long Island Iced Tea",
           "description": "Vodka, Rum, Tequila, Gin, Triple Sec, Lime, Cola",
-          "price": 280.0,
+          "price": 280,
           "sku": "CC-12",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -967,7 +967,7 @@
         {
           "name": "Old Fashioned",
           "description": "Whiskey, Angostura bitter, Sugar",
-          "price": 220.0,
+          "price": 220,
           "sku": "CC-13",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -975,7 +975,7 @@
         {
           "name": "Negroni",
           "description": "Gin, Campari, Sweet Vermouth",
-          "price": 280.0,
+          "price": 280,
           "sku": "CC-14",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -983,7 +983,7 @@
         {
           "name": "Rob Roy",
           "description": "Whisky, Sweet Vermouth, Angostura Bitters",
-          "price": 280.0,
+          "price": 280,
           "sku": "CC-15",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -991,7 +991,7 @@
         {
           "name": "AK47",
           "description": "Vodka, Rum, Tequila, Gin, Whisky, Brandy, Lime, Soda",
-          "price": 280.0,
+          "price": 280,
           "sku": "CC-16",
           "emoji": "🍹",
           "kitchenPrint": false
@@ -999,22 +999,15 @@
         {
           "name": "Sex on the beach",
           "description": "Vodka, Liquor, Orange, Cranberry",
-          "price": 280.0,
+          "price": 280,
           "sku": "CC-17",
           "emoji": "🍹",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Beer Bottle",
-      "emoji": "🍺",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "Leo 620 ml",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "BB-01",
           "emoji": "🍺",
           "kitchenPrint": false
@@ -1022,7 +1015,7 @@
         {
           "name": "Singha 620 ml",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "BB-02",
           "emoji": "🍺",
           "kitchenPrint": false
@@ -1030,7 +1023,7 @@
         {
           "name": "Chang 620 ml",
           "description": "",
-          "price": 89.0,
+          "price": 89,
           "sku": "BB-03",
           "emoji": "🍺",
           "kitchenPrint": false
@@ -1038,7 +1031,7 @@
         {
           "name": "Heineken 620 ml",
           "description": "",
-          "price": 139.0,
+          "price": 139,
           "sku": "BB-04",
           "emoji": "🍺",
           "kitchenPrint": false
@@ -1046,22 +1039,15 @@
         {
           "name": "Corona Extra",
           "description": "",
-          "price": 140.0,
+          "price": 140,
           "sku": "BB-05",
           "emoji": "🍺",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Draft Beer",
-      "emoji": "🍻",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "Tiger Tower",
           "description": "",
-          "price": 599.0,
+          "price": 599,
           "sku": "DB-01",
           "emoji": "🍻",
           "kitchenPrint": false
@@ -1069,7 +1055,7 @@
         {
           "name": "Tiger Jug",
           "description": "",
-          "price": 199.0,
+          "price": 199,
           "sku": "DB-02",
           "emoji": "🍻",
           "kitchenPrint": false
@@ -1077,7 +1063,7 @@
         {
           "name": "Tiger Glass (500 ml)",
           "description": "500 ml",
-          "price": 90.0,
+          "price": 90,
           "sku": "DB-03",
           "emoji": "🍻",
           "kitchenPrint": false
@@ -1085,22 +1071,15 @@
         {
           "name": "Tiger Glass (320 ml)",
           "description": "320 ml",
-          "price": 70.0,
+          "price": 70,
           "sku": "DB-04",
           "emoji": "🍻",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Soft Drinks",
-      "emoji": "🥤",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "Water",
           "description": "",
-          "price": 20.0,
+          "price": 20,
           "sku": "SD-01",
           "emoji": "🥤",
           "kitchenPrint": false
@@ -1108,7 +1087,7 @@
         {
           "name": "Coke",
           "description": "",
-          "price": 40.0,
+          "price": 40,
           "sku": "SD-02",
           "emoji": "🥤",
           "kitchenPrint": false
@@ -1116,7 +1095,7 @@
         {
           "name": "Sprite",
           "description": "",
-          "price": 40.0,
+          "price": 40,
           "sku": "SD-03",
           "emoji": "🥤",
           "kitchenPrint": false
@@ -1124,7 +1103,7 @@
         {
           "name": "Fanta Orange",
           "description": "",
-          "price": 40.0,
+          "price": 40,
           "sku": "SD-04",
           "emoji": "🥤",
           "kitchenPrint": false
@@ -1132,7 +1111,7 @@
         {
           "name": "Schweppes Lemon Soda",
           "description": "",
-          "price": 40.0,
+          "price": 40,
           "sku": "SD-05",
           "emoji": "🥤",
           "kitchenPrint": false
@@ -1140,7 +1119,7 @@
         {
           "name": "Schweppes Tonic Water",
           "description": "",
-          "price": 40.0,
+          "price": 40,
           "sku": "SD-06",
           "emoji": "🥤",
           "kitchenPrint": false
@@ -1148,7 +1127,7 @@
         {
           "name": "Red Bull (Thai)",
           "description": "",
-          "price": 25.0,
+          "price": 25,
           "sku": "SD-07",
           "emoji": "🥤",
           "kitchenPrint": false
@@ -1156,22 +1135,15 @@
         {
           "name": "Singha Soda",
           "description": "",
-          "price": 30.0,
+          "price": 30,
           "sku": "SD-08",
           "emoji": "🥤",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Brandy",
-      "emoji": "🥃",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "J.P. CHENET X.O",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "B-01",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1179,7 +1151,7 @@
         {
           "name": "J.P. CHENET X.O (Bottle)",
           "description": "750 ml",
-          "price": 1350.0,
+          "price": 1350,
           "sku": "B-02",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1187,7 +1159,7 @@
         {
           "name": "Regency Brandy",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "B-03",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1195,7 +1167,7 @@
         {
           "name": "Regency Brandy (Bottle 350 ml)",
           "description": "350 ml",
-          "price": 590.0,
+          "price": 590,
           "sku": "B-04",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1203,7 +1175,7 @@
         {
           "name": "Regency Brandy (Bottle 500 ml)",
           "description": "500 ml",
-          "price": 990.0,
+          "price": 990,
           "sku": "B-05",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1211,22 +1183,15 @@
         {
           "name": "Regency Brandy (Bottle 700 ml)",
           "description": "700 ml",
-          "price": 1500.0,
+          "price": 1500,
           "sku": "B-06",
           "emoji": "🥃",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Gin",
-      "emoji": "🍸",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "Suntory: Sui Japanese Gin",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "G-01",
           "emoji": "🍸",
           "kitchenPrint": false
@@ -1234,7 +1199,7 @@
         {
           "name": "Suntory: Sui Japanese Gin (Bottle)",
           "description": "700 ml",
-          "price": 1500.0,
+          "price": 1500,
           "sku": "G-02",
           "emoji": "🍸",
           "kitchenPrint": false
@@ -1242,7 +1207,7 @@
         {
           "name": "Gilbey's Gin",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "G-03",
           "emoji": "🍸",
           "kitchenPrint": false
@@ -1250,7 +1215,7 @@
         {
           "name": "Langley's Dry Gin",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "G-04",
           "emoji": "🍸",
           "kitchenPrint": false
@@ -1258,22 +1223,15 @@
         {
           "name": "Strange Love: Pink Gin",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "G-05",
           "emoji": "🍸",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Rum",
-      "emoji": "🥃",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "Captain Morgan Gold Rum",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "R-01",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1281,7 +1239,7 @@
         {
           "name": "Captain Morgan Dark Rum",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "R-02",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1289,7 +1247,7 @@
         {
           "name": "Bacardi White Rum",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "R-03",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1297,7 +1255,7 @@
         {
           "name": "Bacardi White Rum (Bottle)",
           "description": "750 ml",
-          "price": 1390.0,
+          "price": 1390,
           "sku": "R-04",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1305,7 +1263,7 @@
         {
           "name": "SangSom",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "R-05",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1313,22 +1271,15 @@
         {
           "name": "SangSom (Bottle)",
           "description": "1 L",
-          "price": 700.0,
+          "price": 700,
           "sku": "R-06",
           "emoji": "🥃",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Tequila",
-      "emoji": "🌵",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "Jose Curevo Gold",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "T-01",
           "emoji": "🌵",
           "kitchenPrint": false
@@ -1336,7 +1287,7 @@
         {
           "name": "Jose Curevo Gold (Bottle)",
           "description": "700 ml",
-          "price": 1590.0,
+          "price": 1590,
           "sku": "T-02",
           "emoji": "🌵",
           "kitchenPrint": false
@@ -1344,22 +1295,15 @@
         {
           "name": "Dead Man's Finger",
           "description": "Glass",
-          "price": 90.0,
+          "price": 90,
           "sku": "T-03",
           "emoji": "🌵",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Vodka",
-      "emoji": "🍸",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "Gilbey's Vodka",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "V-01",
           "emoji": "🍸",
           "kitchenPrint": false
@@ -1367,22 +1311,15 @@
         {
           "name": "Bols Vodka",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "V-02",
           "emoji": "🍸",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Whisky",
-      "emoji": "🥃",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "Moonshine Runners Blended Whisky",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "W-01",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1390,7 +1327,7 @@
         {
           "name": "Moonshine Runners Straight Burbon",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "W-02",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1398,7 +1335,7 @@
         {
           "name": "Bowmore 12yrs",
           "description": "Glass",
-          "price": 150.0,
+          "price": 150,
           "sku": "W-03",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1406,7 +1343,7 @@
         {
           "name": "Marker's Mark",
           "description": "Glass",
-          "price": 120.0,
+          "price": 120,
           "sku": "W-04",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1414,7 +1351,7 @@
         {
           "name": "Jim Beam: White",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "W-05",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1422,7 +1359,7 @@
         {
           "name": "Jim Beam: White (Bottle)",
           "description": "Bottle",
-          "price": 1200.0,
+          "price": 1200,
           "sku": "W-06",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1430,7 +1367,7 @@
         {
           "name": "Jack Daniel's Tennessee Whiskey",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "W-07",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1438,7 +1375,7 @@
         {
           "name": "Jack Daniel's Tennessee Whiskey (Bottle)",
           "description": "1 L",
-          "price": 2000.0,
+          "price": 2000,
           "sku": "W-08",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1446,7 +1383,7 @@
         {
           "name": "285 Blend",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "W-09",
           "emoji": "🥃",
           "kitchenPrint": false
@@ -1454,22 +1391,15 @@
         {
           "name": "285 Blend (Bottle)",
           "description": "1 L",
-          "price": 830.0,
+          "price": 830,
           "sku": "W-10",
           "emoji": "🥃",
           "kitchenPrint": false
-        }
-      ]
-    },
-    {
-      "name": "Liqueur",
-      "emoji": "🍷",
-      "kitchenPrint": false,
-      "items": [
+        },
         {
           "name": "Jagermeister",
           "description": "Glass",
-          "price": 100.0,
+          "price": 100,
           "sku": "L-01",
           "emoji": "🍷",
           "kitchenPrint": false
@@ -1477,7 +1407,7 @@
         {
           "name": "Jagermeister (Bottle)",
           "description": "700 ml",
-          "price": 1350.0,
+          "price": 1350,
           "sku": "L-02",
           "emoji": "🍷",
           "kitchenPrint": false

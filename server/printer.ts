@@ -5,6 +5,7 @@ import { formatMoney } from "./currency.ts";
 import { sendWindowsRaw } from "./windows-print.ts";
 import { enqueuePrint } from "./actionQueue.ts";
 import { personShares } from "./pricing.ts";
+import type { PrintStation } from "./stations.ts";
 
 export const SLIP_WIDTH_80MM = 42;
 export const SLIP_WIDTH_58MM = 32;
@@ -124,6 +125,14 @@ function appendPricedItems(
   return { groups, split };
 }
 
+function appendSlipNote(lines: string[], note: string | undefined, w: number) {
+  const text = String(note || "").trim();
+  if (!text) return;
+  lines.push(rule(w));
+  lines.push(center("NOTE", w));
+  wrap(text, w).forEach((l) => lines.push(l));
+}
+
 export async function slipWidth(printerType: "kitchen" | "receipt") {
   const printer = await prisma.printer.findFirst({
     where: { type: printerType, active: true },
@@ -152,11 +161,20 @@ export function buildKitchenSlip(opts: {
   items: { qty: number; name: string; notes: string; diner?: string }[];
   width?: number;
   addon?: boolean;
+  station?: PrintStation;
 }) {
   const w = opts.width ?? SLIP_WIDTH_80MM;
+  const frontDesk = opts.station === "front_desk";
+  const title = frontDesk
+    ? opts.addon
+      ? "FRONT DESK  ·  NEW ITEMS"
+      : "FRONT DESK"
+    : opts.addon
+      ? "KITCHEN  ·  NEW ITEMS"
+      : "KITCHEN SLIP";
   const lines = [
     rule(w, "*"),
-    center(opts.addon ? "KITCHEN  ·  NEW ITEMS" : "KITCHEN SLIP", w),
+    center(title, w),
     center(opts.restaurant, w),
     rule(w, "*"),
     `#${opts.orderNo}  ${opts.tableLabel}`.slice(0, w),
@@ -185,7 +203,7 @@ export function buildKitchenSlip(opts: {
     lines.push(center("NOTE", w));
     wrap(opts.note, w).forEach((l) => lines.push(l));
   }
-  lines.push(rule(w), center("SEND TO EXPO", w), rule(w, "*"), "");
+  lines.push(rule(w), center(frontDesk ? "PREPARE AT BAR" : "SEND TO EXPO", w), rule(w, "*"), "");
   return lines.join("\n");
 }
 
@@ -198,9 +216,17 @@ export function buildCancelSlip(opts: {
   items: { qty: number; name: string; notes?: string; diner?: string }[];
   width?: number;
   scope?: "order" | "item";
+  station?: PrintStation;
 }) {
   const w = opts.width ?? SLIP_WIDTH_80MM;
-  const title = opts.scope === "item" ? "CANCEL ITEM" : "CANCEL ORDER";
+  const frontDesk = opts.station === "front_desk";
+  const title = frontDesk
+    ? opts.scope === "item"
+      ? "FRONT DESK CANCEL"
+      : "FRONT DESK VOID"
+    : opts.scope === "item"
+      ? "CANCEL ITEM"
+      : "CANCEL ORDER";
   const lines = [
     rule(w, "*"),
     center(title, w),
@@ -222,7 +248,7 @@ export function buildCancelSlip(opts: {
     lines.push(rule(w));
     wrap(opts.note, w).forEach((l) => lines.push(l));
   }
-  lines.push(rule(w), center("REMOVE FROM BOARD", w), rule(w, "*"), "");
+  lines.push(rule(w), center(frontDesk ? "REMOVE FROM BAR" : "REMOVE FROM BOARD", w), rule(w, "*"), "");
   return lines.join("\n");
 }
 
@@ -248,6 +274,7 @@ export function buildBillSlip(opts: {
   footer: string;
   width?: number;
   decimals?: number;
+  note?: string;
 }) {
   const w = opts.width ?? SLIP_WIDTH_80MM;
   const money = (n: number) => formatMoney(n, opts.currency, true, opts.decimals ?? 2);
@@ -283,6 +310,7 @@ export function buildBillSlip(opts: {
       lines.push(row(group.label, money(group.total), w));
     }
   }
+  appendSlipNote(lines, opts.note, w);
   lines.push(rule(w));
   wrap(opts.footer || "Please pay at cashier", w).map((l) => center(l, w)).forEach((l) => lines.push(l));
   lines.push("");
@@ -314,6 +342,7 @@ export function buildReceiptSlip(opts: {
   footer: string;
   width?: number;
   decimals?: number;
+  note?: string;
 }) {
   const w = opts.width ?? SLIP_WIDTH_80MM;
   const money = (n: number) => formatMoney(n, opts.currency, true, opts.decimals ?? 2);
@@ -356,6 +385,7 @@ export function buildReceiptSlip(opts: {
     lines.push(row((opts.paymentMethod || "PAID").toUpperCase(), money(opts.paidAmount), w));
   }
   if (opts.changeAmount) lines.push(row("Change", money(opts.changeAmount), w));
+  appendSlipNote(lines, opts.note, w);
   lines.push(rule(w));
   wrap(opts.footer || "Thank you", w).map((l) => center(l, w)).forEach((l) => lines.push(l));
   lines.push(center("Slip copy", w), "");
@@ -364,15 +394,15 @@ export function buildReceiptSlip(opts: {
 
 export { tableLabel as formatTableLabel };
 
-function escpos(text: string, opts?: { cut?: boolean; kick?: boolean; kitchen?: boolean }) {
+function escpos(text: string, opts?: { cut?: boolean; kick?: boolean; kitchen?: boolean; station?: PrintStation }) {
   const cut = opts?.cut ?? true;
   const kick = opts?.kick ?? false;
   const chunks: Buffer[] = [Buffer.from([0x1b, 0x40])];
   chunks.push(Buffer.from([0x1b, 0x74, 0x00]));
-  if (opts?.kitchen) {
+  if (opts?.kitchen || opts?.station === "front_desk") {
     chunks.push(Buffer.from([0x1b, 0x61, 0x01]));
     chunks.push(Buffer.from([0x1d, 0x21, 0x11]));
-    chunks.push(Buffer.from("KITCHEN\n", "ascii"));
+    chunks.push(Buffer.from(opts?.station === "front_desk" ? "FRONT DESK\n" : "KITCHEN\n", "ascii"));
     chunks.push(Buffer.from([0x1d, 0x21, 0x00]));
     chunks.push(Buffer.from([0x1b, 0x61, 0x00]));
   }
@@ -445,11 +475,16 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function printerPayload(printer: { cashDrawerEnabled: boolean }, content: string, opts: { kickDrawer?: boolean; kitchen?: boolean }) {
+function printerPayload(
+  printer: { cashDrawerEnabled: boolean },
+  content: string,
+  opts: { kickDrawer?: boolean; kitchen?: boolean; station?: PrintStation }
+) {
   return escpos(content, {
     cut: true,
     kick: Boolean(opts.kickDrawer && printer.cashDrawerEnabled),
     kitchen: Boolean(opts.kitchen),
+    station: opts.station,
   });
 }
 
@@ -495,7 +530,7 @@ async function sendViaAgent(
 async function sendToDevice(
   printer: { id: string; connection: string; host: string; port: number; cashDrawerEnabled: boolean },
   content: string,
-  opts: { kickDrawer?: boolean; kitchen?: boolean; type: string; title: string }
+  opts: { kickDrawer?: boolean; kitchen?: boolean; station?: PrintStation; type: string; title: string }
 ): Promise<{ job?: Awaited<ReturnType<typeof prisma.printJob.create>> }> {
   const payload = printerPayload(printer, content, opts);
   if ((printer.connection === "usb" || printer.connection === "windows") && printer.host) {
@@ -523,6 +558,7 @@ export async function printToPrinter(opts: {
   title: string;
   content: string;
   kickDrawer?: boolean;
+  station?: PrintStation;
 }) {
   return enqueuePrint(() => dispatchPrint(opts));
 }
@@ -532,12 +568,18 @@ async function dispatchPrint(opts: {
   title: string;
   content: string;
   kickDrawer?: boolean;
+  station?: PrintStation;
 }) {
   const printers = await prisma.printer.findMany({ where: { active: true } });
   const preferred = printers.filter((p) => p.type === opts.printerType);
   const fallback = printers.filter((p) => p.type !== opts.printerType);
   const queue = [...preferred, ...fallback];
-  const jobType = opts.kickDrawer && opts.printerType === "receipt" ? "receipt_drawer" : opts.printerType;
+  const jobType =
+    opts.station === "front_desk"
+      ? "front_desk"
+      : opts.kickDrawer && opts.printerType === "receipt"
+        ? "receipt_drawer"
+        : opts.printerType;
 
   let status = queue.length ? "failed" : "simulated";
   let error = queue.length ? "No printer accepted the job" : "";
@@ -549,6 +591,7 @@ async function dispatchPrint(opts: {
       const result = await sendToDevice(printer, opts.content, {
         kickDrawer: opts.kickDrawer && opts.printerType === "receipt",
         kitchen: opts.printerType === "kitchen",
+        station: opts.station,
         type: jobType,
         title: opts.title,
       });
@@ -578,6 +621,91 @@ async function dispatchPrint(opts: {
   });
 
   return { job, printer: used, status: job.status, content: opts.content };
+}
+
+export type StationSlipResult = {
+  station: PrintStation;
+  content: string;
+  print: { status: string };
+};
+
+export async function printStationSlips(opts: {
+  restaurant: string;
+  orderNo: number;
+  tableLabel: string;
+  type: string;
+  note: string;
+  kitchenItems: { qty: number; name: string; notes?: string; diner?: string }[];
+  drinkItems: { qty: number; name: string; notes?: string; diner?: string }[];
+  width: number;
+  addon?: boolean;
+  kind?: "ticket" | "cancel";
+  cancelScope?: "order" | "item";
+}) {
+  const slips: StationSlipResult[] = [];
+  const jobs: { station: PrintStation; items: typeof opts.kitchenItems }[] = [];
+  if (opts.kitchenItems.length) jobs.push({ station: "kitchen", items: opts.kitchenItems });
+  if (opts.drinkItems.length) jobs.push({ station: "front_desk", items: opts.drinkItems });
+
+  for (const job of jobs) {
+    const content =
+      opts.kind === "cancel"
+        ? buildCancelSlip({
+            restaurant: opts.restaurant,
+            orderNo: opts.orderNo,
+            tableLabel: opts.tableLabel,
+            type: opts.type,
+            note: opts.note,
+            items: job.items,
+            width: opts.width,
+            scope: opts.cancelScope,
+            station: job.station,
+          })
+        : buildKitchenSlip({
+            restaurant: opts.restaurant,
+            orderNo: opts.orderNo,
+            tableLabel: opts.tableLabel,
+            type: opts.type,
+            note: opts.note,
+            items: job.items.map((item) => ({ ...item, notes: item.notes || "" })),
+            width: opts.width,
+            addon: opts.addon,
+            station: job.station,
+          });
+    const title =
+      job.station === "front_desk"
+        ? opts.kind === "cancel"
+          ? `Front Desk cancel #${opts.orderNo}`
+          : opts.addon
+            ? `Front Desk #${opts.orderNo} add-on`
+            : `Front Desk #${opts.orderNo}`
+        : opts.kind === "cancel"
+          ? `Cancel #${opts.orderNo}`
+          : opts.addon
+            ? `Kitchen #${opts.orderNo} add-on`
+            : `Kitchen #${opts.orderNo}`;
+    const print = await printToPrinter({
+      printerType: "kitchen",
+      title,
+      content,
+      station: job.station,
+    });
+    slips.push({ station: job.station, content, print: { status: print.status } });
+  }
+
+  const kitchenSlip = slips.find((slip) => slip.station === "kitchen");
+  const status = !slips.length
+    ? "skipped"
+    : slips.every((slip) => slip.print.status === "printed")
+      ? "printed"
+      : slips.some((slip) => slip.print.status === "failed")
+        ? "failed"
+        : slips[0].print.status;
+  return {
+    slips,
+    content: kitchenSlip?.content || slips[0]?.content || "",
+    print: { status },
+  };
 }
 
 export async function kickCashDrawer() {

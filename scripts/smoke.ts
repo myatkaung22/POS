@@ -226,6 +226,50 @@ async function main() {
     return `${first.name} then ${second.name} only`;
   });
 
+  await check("Food and drink print two slips", async () => {
+    const cats = (await fetchJson("/api/menu")) as { name: string; items: { id: string; name: string }[] }[];
+    const drinkCat = cats.find((c) => /drink|cocktail|beer|soda|soft/i.test(c.name));
+    const foodCat = cats.find((c) => c !== drinkCat && c.items.length && !/drink|cocktail|beer|soda|soft/i.test(c.name));
+    const food = foodCat?.items[0];
+    const drink = drinkCat?.items[0];
+    if (!food || !drink) throw new Error("need a food item and a drink item");
+    const created = (await fetchJson("/api/orders", {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({ type: "takeaway" }),
+    })) as { id: string };
+    await fetchJson(`/api/orders/${created.id}/items`, {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({ menuItemId: food.id, qty: 1 }),
+    });
+    await fetchJson(`/api/orders/${created.id}/items`, {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({ menuItemId: drink.id, qty: 1 }),
+    });
+    const sent = (await fetchJson(`/api/orders/${created.id}/send-kitchen`, {
+      method: "POST",
+      headers: auth(),
+      body: "{}",
+    })) as {
+      content: string;
+      slips?: { station: string; content: string }[];
+    };
+    const slips = sent.slips || [];
+    if (slips.length !== 2) throw new Error(`expected 2 slips, got ${slips.length}`);
+    const kitchen = slips.find((s) => s.station === "kitchen");
+    const desk = slips.find((s) => s.station === "front_desk");
+    if (!kitchen || !desk) throw new Error("missing kitchen or front desk slip");
+    if (!kitchen.content.toUpperCase().includes("KITCHEN")) throw new Error("kitchen slip missing KITCHEN");
+    if (!desk.content.toUpperCase().includes("FRONT DESK")) throw new Error("drink slip missing FRONT DESK");
+    if (!kitchen.content.toUpperCase().includes(food.name.toUpperCase())) throw new Error("kitchen slip missing food");
+    if (kitchen.content.toUpperCase().includes(drink.name.toUpperCase())) throw new Error("kitchen slip included drink");
+    if (!desk.content.toUpperCase().includes(drink.name.toUpperCase())) throw new Error("front desk slip missing drink");
+    if (desk.content.toUpperCase().includes(food.name.toUpperCase())) throw new Error("front desk slip included food");
+    return `${food.name} + ${drink.name}`;
+  });
+
   await check("Clock in / out", async () => {
     const me = (await fetchJson("/api/time/me", { headers: auth() })) as { shift?: { id: string } | null };
     if (me.shift) {
@@ -347,6 +391,11 @@ async function main() {
     const bob = ticket.items.filter((i) => (i.diner || "") === "Bob");
     if (anna.length !== 1 || anna[0].qty !== 2) throw new Error("same diner should merge pending lines");
     if (bob.length !== 1) throw new Error("different diner should stay a separate line");
+    await fetchJson(`/api/orders/${created.id}`, {
+      method: "PATCH",
+      headers: auth(),
+      body: JSON.stringify({ customerNote: "No ice please" }),
+    });
     const billed = (await fetchJson(`/api/orders/${created.id}/bill`, {
       method: "POST",
       headers: auth(),
@@ -357,6 +406,7 @@ async function main() {
     if (!slip.includes("BOB")) throw new Error("bill missing Bob");
     if (!slip.includes("ANNA TOTAL") || !slip.includes("BOB TOTAL")) throw new Error("bill missing person subtotals");
     if (!slip.includes("EACH PERSON")) throw new Error("bill missing each-person totals");
+    if (!slip.includes("NOTE") || !slip.includes("NO ICE PLEASE")) throw new Error("bill missing ticket note");
     return "Anna / Bob named on check";
   });
 
@@ -400,6 +450,37 @@ async function main() {
     } finally {
       await fetchJson(`/api/orders/${sent.id}/cancel`, { method: "POST", headers: auth(), body: "{}" });
     }
+  });
+
+  await check("Change table moves an open ticket", async () => {
+    const tables = (await fetchJson("/api/tables", { headers: auth() })) as {
+      id: string;
+      number: number;
+      status: string;
+    }[];
+    const src = tables.find((t) => t.status === "available") || tables[0];
+    const dest = tables.find((t) => t.id !== src?.id && t.status === "available");
+    if (!src || !dest) throw new Error("need two free tables");
+    const created = (await fetchJson("/api/orders", {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({ tableId: src.id }),
+    })) as { id: string };
+    const menu = (await fetchJson("/api/menu")) as { items: { id: string }[] }[];
+    const dish = menu.flatMap((c) => c.items)[0];
+    if (!dish) throw new Error("no menu item");
+    await fetchJson(`/api/orders/${created.id}/items`, {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({ menuItemId: dish.id, qty: 1 }),
+    });
+    const moved = (await fetchJson(`/api/orders/${created.id}/change-table`, {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({ tableId: dest.id }),
+    })) as { tableId?: string; table?: { number: number } };
+    if (moved.tableId !== dest.id) throw new Error(`expected table ${dest.number}`);
+    return `T${src.number} → T${dest.number}`;
   });
 
   const failed = results.filter((r) => !r.ok);

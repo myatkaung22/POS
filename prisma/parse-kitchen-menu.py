@@ -29,6 +29,7 @@ EMOJI = {
     "Vodka": "🍸",
     "Whisky": "🥃",
     "Liqueur": "🍷",
+    "Drink": "🍹",
 }
 
 DRINK_CATS = {
@@ -265,6 +266,22 @@ def main():
                 ],
             }
         )
+
+    drink_items = []
+    food = []
+    for cat in categories:
+        if cat["name"] in DRINK_CATS or cat["name"] in {"Drink", "Drinks"}:
+            drink_items.extend({**item, "kitchenPrint": False, "emoji": item.get("emoji") or "🍹"} for item in cat["items"])
+        else:
+            food.append(cat)
+    if drink_items:
+        food.append({
+            "name": "Drink",
+            "emoji": "🍹",
+            "kitchenPrint": False,
+            "items": drink_items,
+        })
+    categories = food
 
     payload = {
         "source": "Menu/Kitchen Menu list.xlsx",

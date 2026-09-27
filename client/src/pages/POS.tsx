@@ -8,16 +8,17 @@ import { toast } from "../components/Toast";
 import { useQrAlerts } from "../alerts";
 import { money, DEFAULT_CURRENCY, type Category, type DiningTable, type Order, type Promotion, personBills } from "../types";
 import { DishPhoto } from "../components/DishPhoto";
-import { printSlip } from "../printSlip";
+import { notifySlipPrint, notifyStationPrint } from "../printSlip";
+import { isDrinkItem } from "../stations";
 import { useActionQueue } from "../actionQueue";
 
 function isServedItem(status: string) {
   return status === "served" || status === "cancelled";
 }
 
-function itemKitchenLabel(status: string) {
+function itemKitchenLabel(status: string, item?: { menuItem?: { category?: { name?: string | null } | null } | null }) {
   if (status === "pending") return "new";
-  if (status === "sent") return "in kitchen";
+  if (status === "sent") return isDrinkItem(item) ? "front desk" : "in kitchen";
   if (status === "preparing") return "cooking";
   if (status === "ready") return "ready";
   if (status === "served") return "served";
@@ -101,6 +102,7 @@ export function PosPage() {
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestAddress, setGuestAddress] = useState("");
+  const [ticketNote, setTicketNote] = useState("");
   const [posTab, setPosTab] = useState<"tables" | "check" | "bill">("tables");
 
   const tableId = params.get("table") || "";
@@ -139,6 +141,7 @@ export function PosPage() {
     setGuestName(created.customerName || "");
     setGuestPhone(created.customerPhone || "");
     setGuestAddress(created.deliveryAddress || "");
+    setTicketNote(created.customerNote || "");
   }
 
   useEffect(() => {
@@ -156,6 +159,7 @@ export function PosPage() {
         setGuestName(row.customerName || "");
         setGuestPhone(row.customerPhone || "");
         setGuestAddress(row.deliveryAddress || "");
+        setTicketNote(row.customerNote || "");
       });
       return;
     }
@@ -216,6 +220,22 @@ export function PosPage() {
     navigate(`/pos?type=${kind}`);
   }
 
+  async function changeTable(nextId: string) {
+    if (!order || !nextId || nextId === order.tableId) return;
+    await run(`move:${order.id}`, "Moving table", async () => {
+      const next = await api<Order>(`/api/orders/${order.id}/change-table`, {
+        method: "POST",
+        body: JSON.stringify({ tableId: nextId }),
+      });
+      setOrder(next);
+      await loadTables();
+      navigate(`/pos?table=${nextId}`);
+      toast(next.table ? `Moved to table ${next.table.number} · ${next.table.name}` : "Table changed");
+    });
+  }
+
+  const freeTables = tables.filter((t) => t.id !== (order?.tableId || tableId) && t.status === "available");
+
   async function addItem(menuItemId: string) {
     if (!order || ["completed", "cancelled"].includes(order.status)) return;
     const next = await api<Order>(`/api/orders/${order.id}/items`, {
@@ -261,8 +281,18 @@ export function PosPage() {
         customerName: guestName,
         customerPhone: guestPhone,
         deliveryAddress: guestAddress,
-        customerNote: order.customerNote,
+        customerNote: ticketNote,
       }),
+    });
+    setOrder(next);
+  }
+
+  async function saveTicketNote() {
+    if (!order) return;
+    if (ticketNote.trim() === String(order.customerNote || "").trim()) return;
+    const next = await api<Order>(`/api/orders/${order.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ customerNote: ticketNote }),
     });
     setOrder(next);
   }
@@ -275,7 +305,7 @@ export function PosPage() {
         discountType,
         discountValue: Number(discountValue),
         promotionId: discountType === "promotion" ? promoId : null,
-        customerNote: order.customerNote,
+        customerNote: ticketNote,
       }),
     });
     setOrder(next);
@@ -290,28 +320,25 @@ export function PosPage() {
     }
     await run(`kitchen:${order.id}`, "Sending to kitchen", async () => {
       await saveGuest();
-      const data = await api<{ order: Order; print: { status: string }; content: string }>(
+      const data = await api<{ order: Order; print: { status: string }; content: string; slips?: { station: string }[] }>(
         `/api/orders/${order.id}/send-kitchen`,
         { method: "POST" }
       );
       setOrder(data.order);
       alerts.filter((a) => a.orderId === order.id).forEach((a) => dismiss(a.id));
-      if (data.content && data.print?.status !== "printed") {
-        void printSlip(`Kitchen #${data.order.orderNo}`, data.content);
-      }
-      toast(data.print?.status === "printed" ? "Sent to kitchen · slip printed" : "Sent to kitchen", "info");
+      notifyStationPrint(data.print, data.slips, "Sent");
     });
   }
 
   async function printBill() {
     if (!order) return;
+    await saveTicketNote();
     await run(`bill:${order.id}`, "Printing bill", async () => {
       const data = await api<{ order: Order; print: { status: string }; content: string }>(`/api/orders/${order.id}/bill`, {
         method: "POST",
       });
       setOrder(data.order);
-      if (data.print?.status !== "printed") void printSlip(`Bill #${data.order.orderNo}`, data.content);
-      toast(data.print?.status === "printed" ? "Bill sent to slip printer" : "Bill slip ready to print");
+      notifySlipPrint(data.print, "Bill sent to slip printer", "Bill sent · printer not ready");
     });
   }
 
@@ -330,8 +357,7 @@ export function PosPage() {
         return;
       }
       setOrder(data.order);
-      if (data.content && data.print?.status !== "printed") void printSlip(`Cancel #${data.order.orderNo}`, data.content);
-      toast(data.print?.status === "printed" ? "Item cancelled · cancel slip sent" : "Item cancelled");
+      notifySlipPrint(data.print, "Item cancelled · cancel slip sent", "Item cancelled");
     });
   }
 
@@ -342,9 +368,8 @@ export function PosPage() {
       const data = await api<{ order: Order; print?: { status: string }; content?: string }>(`/api/orders/${order.id}/cancel`, {
         method: "POST",
       });
-      if (data.content && data.print?.status !== "printed") void printSlip(`Cancel #${data.order.orderNo}`, data.content);
+      notifySlipPrint(data.print, "Order cancelled · cancel slip sent", "Order cancelled");
       setOrder(null);
-      toast(data.print?.status === "printed" ? "Order cancelled · cancel slip sent" : "Order cancelled");
       navigate(data.order.type === "takeaway" || data.order.type === "delivery" ? "/dispatch" : "/tables");
     });
   }
@@ -361,6 +386,7 @@ export function PosPage() {
     }
     const cashAmt = payments.find((p) => p.method === "cash")?.amount || 0;
     const paidAmount = cashAmt ? Number(tender || cashAmt) : order.total;
+    await saveTicketNote();
     await run(`pay:${order.id}`, "Printing receipt", async () => {
       const data = await api<{ order: Order; print: { status: string }; content?: string }>(`/api/orders/${order.id}/pay`, {
         method: "POST",
@@ -371,7 +397,7 @@ export function PosPage() {
       setPayOpen(false);
       void loadTables();
       if (data.content && data.print?.status !== "printed") {
-        void printSlip(`Receipt #${data.order.orderNo}`, data.content);
+        notifySlipPrint(data.print, "Receipt printed", "Paid · receipt printer not ready");
       }
       toast(offPrem ? "Paid · check Pickup board" : "Paid · table is free");
     });
@@ -607,6 +633,25 @@ export function PosPage() {
             </div>
             {order && <StatusPill status={order.status} guest={pendingGuest.length > 0} items={order.items} />}
           </div>
+          {order?.tableId && !locked && (
+            <select
+              value=""
+              disabled={busy(`move:${order.id}`) || !freeTables.length}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                e.currentTarget.value = "";
+                if (nextId) void changeTable(nextId);
+              }}
+              className="mt-3 w-full rounded-xl bg-ink-800 px-3 py-2 text-sm outline-none disabled:opacity-40"
+            >
+              <option value="">{freeTables.length ? "Change table" : "No free table"}</option>
+              {freeTables.map((t) => (
+                <option key={t.id} value={t.id}>
+                  Table {t.number} · {t.name}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[11px]">
             {["Add", "Kitchen", "Pay"].map((label, i) => (
               <div
@@ -685,7 +730,7 @@ export function PosPage() {
                         <div className="font-medium">{item.name}</div>
                         <div className="text-xs text-cream-100/45">
                           {fmt(item.price)}
-                          {item.status === "pending" ? " · new" : ` · ${itemKitchenLabel(item.status)}`}
+                          {item.status === "pending" ? " · new" : ` · ${itemKitchenLabel(item.status, item)}`}
                           {item.notes ? ` · ${item.notes}` : ""}
                           {!splitDiners && item.diner ? ` · ${item.diner}` : ""}
                         </div>
@@ -765,6 +810,25 @@ export function PosPage() {
             </div>
             {order && <StatusPill status={order.status} guest={pendingGuest.length > 0} items={order.items} />}
           </div>
+          {order?.tableId && !locked && (
+            <select
+              value=""
+              disabled={busy(`move:${order.id}`) || !freeTables.length}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                e.currentTarget.value = "";
+                if (nextId) void changeTable(nextId);
+              }}
+              className="mt-3 w-full rounded-xl bg-ink-800 px-3 py-2 text-sm outline-none disabled:opacity-40"
+            >
+              <option value="">{freeTables.length ? "Change table" : "No free table"}</option>
+              {freeTables.map((t) => (
+                <option key={t.id} value={t.id}>
+                  Table {t.number} · {t.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-4 text-sm">
           {!order?.items.filter((i) => i.status !== "cancelled").length && (
@@ -816,7 +880,7 @@ export function PosPage() {
                       {fmt(item.price * item.qty)}
                       {item.diner && !splitDiners ? ` · ${item.diner}` : ""}
                       {item.notes ? ` · ${item.notes}` : ""}
-                      {` · ${itemKitchenLabel(item.status)}`}
+                      {` · ${itemKitchenLabel(item.status, item)}`}
                     </div>
                   </div>
                   {!locked && (
@@ -833,6 +897,15 @@ export function PosPage() {
               ))}
             </div>
           ))}
+          <textarea
+            value={ticketNote}
+            onChange={(e) => setTicketNote(e.target.value)}
+            onBlur={() => void saveTicketNote()}
+            placeholder="Note on bill / receipt"
+            rows={2}
+            disabled={locked}
+            className="mb-3 w-full rounded-xl bg-ink-800 px-3 py-2 text-sm outline-none placeholder:text-cream-100/35 disabled:opacity-40"
+          />
           <div className="grid grid-cols-2 gap-2">
             <select value={discountType} onChange={(e) => setDiscountType(e.target.value)} className="rounded-xl bg-ink-800 px-2 py-2" disabled={locked}>
               <option value="none">No discount</option>
