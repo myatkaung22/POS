@@ -30,6 +30,13 @@ function canServeItem(status: string) {
   return ["sent", "preparing", "ready"].includes(status);
 }
 
+/** Empty or 0 means exact cash (no extra notes). `"0"` is truthy so `tender || cashAmt` must not be used. */
+function cashReceived(raw: string, cashAmt: number) {
+  const n = Number(String(raw || "").replace(/,/g, "").trim());
+  if (!Number.isFinite(n) || n <= 0) return cashAmt;
+  return n;
+}
+
 function DinerPicker({
   value,
   names,
@@ -385,7 +392,11 @@ export function PosPage() {
       return;
     }
     const cashAmt = payments.find((p) => p.method === "cash")?.amount || 0;
-    const paidAmount = cashAmt ? Number(tender || cashAmt) : order.total;
+    const paidAmount = cashAmt ? cashReceived(tender, cashAmt) : order.total;
+    if (cashAmt && paidAmount < cashAmt) {
+      toast(`Cash received is short · need at least ${fmt(cashAmt)}`, "err");
+      return;
+    }
     await saveTicketNote();
     await run(`pay:${order.id}`, "Printing receipt", async () => {
       const data = await api<{ order: Order; print: { status: string }; content?: string }>(`/api/orders/${order.id}/pay`, {
@@ -988,7 +999,7 @@ export function PosPage() {
                   return;
                 }
                 setPayLines([{ method: "cash", amount: String(order.total) }]);
-                setTender("");
+                setTender(String(order.total));
                 setPayOpen(true);
               }}
               className="rounded-2xl bg-gold-500 py-3 font-medium text-ink-950 disabled:opacity-40"
@@ -1059,12 +1070,19 @@ export function PosPage() {
               ))}
             </div>
             {payLines.some((line) => line.method === "cash") && (
-              <input
-                className="mt-3 w-full rounded-2xl bg-ink-800 px-4 py-3 outline-none"
-                placeholder="Cash tendered"
-                value={tender}
-                onChange={(e) => setTender(e.target.value)}
-              />
+              <label className="mt-3 block text-sm">
+                <span className="text-cream-100/60">Cash received</span>
+                <input
+                  className="mt-1 w-full rounded-2xl bg-ink-800 px-4 py-3 outline-none"
+                  inputMode="decimal"
+                  placeholder="Exact cash"
+                  value={tender}
+                  onChange={(e) => setTender(e.target.value)}
+                />
+                <span className="mt-1 block text-xs text-cream-100/45">
+                  0 or blank = exact. Type more than the cash amount for change.
+                </span>
+              </label>
             )}
             <div className="mt-2 text-sm text-sage-400">
               Remaining{" "}
@@ -1076,7 +1094,7 @@ export function PosPage() {
               {payLines.some((line) => line.method === "cash")
                 ? ` · Change ${fmt(
                     Math.max(
-                      Number(tender || payLines.find((l) => l.method === "cash")?.amount || 0) -
+                      cashReceived(tender, Number(payLines.find((l) => l.method === "cash")?.amount || 0)) -
                         Number(payLines.find((l) => l.method === "cash")?.amount || 0),
                       0
                     )

@@ -317,6 +317,34 @@ async function main() {
     return `${cash} cash + ${qr} qr`;
   });
 
+  await check("Cash tender 0 counts as exact pay", async () => {
+    const created = (await fetchJson("/api/orders", {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({ type: "takeaway" }),
+    })) as { id: string };
+    const menu = (await fetchJson("/api/menu")) as { items: { id: string; price: number }[] }[];
+    const dish = menu.flatMap((c) => c.items).find((i) => i.price > 1);
+    if (!dish) throw new Error("no menu item");
+    const ticket = (await fetchJson(`/api/orders/${created.id}/items`, {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({ menuItemId: dish.id, qty: 1 }),
+    })) as { total: number; id: string };
+    const paid = (await fetchJson(`/api/orders/${ticket.id}/pay`, {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({
+        payments: [{ method: "cash", amount: ticket.total }],
+        paidAmount: 0,
+      }),
+    })) as { order: { status: string; paidAmount: number; changeAmount: number; total: number } };
+    if (!["paid", "completed"].includes(paid.order.status)) throw new Error(`status ${paid.order.status}`);
+    if (paid.order.paidAmount !== paid.order.total) throw new Error(`paid ${paid.order.paidAmount} total ${paid.order.total}`);
+    if (paid.order.changeAmount) throw new Error(`change ${paid.order.changeAmount}`);
+    return `# exact ฿${paid.order.total}`;
+  });
+
   await check("Sales day 14:00–02:00", async () => {
     const report = (await fetchJson("/api/reports?period=day", { headers: auth() })) as {
       start: string;

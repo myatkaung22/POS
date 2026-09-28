@@ -101,9 +101,10 @@ function parsePayRequest(body: Record<string, unknown>, total: number) {
     throw Object.assign(new Error("Payment amounts must equal the bill"), { status: 400 });
   }
   const cashAmt = payments.find((p) => p.method === "cash")?.amount || 0;
-  const cashTender = cashAmt ? money(Number(body.paidAmount ?? cashAmt)) : 0;
+  const rawTender = money(Number(String(body.paidAmount ?? "").replace(/,/g, "").trim()));
+  const cashTender = cashAmt ? (!Number.isFinite(rawTender) || rawTender <= 0 ? cashAmt : rawTender) : 0;
   if (cashAmt && cashTender < cashAmt) {
-    throw Object.assign(new Error("Cash tendered is short"), { status: 400 });
+    throw Object.assign(new Error(`Cash received is short · need at least ${cashAmt}`), { status: 400 });
   }
   return {
     payments,
