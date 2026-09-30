@@ -3,8 +3,8 @@ export type Role = (typeof ROLES)[number];
 
 export const PERMISSIONS = {
   pos: ["admin", "manager", "cashier", "waiter"],
-  checkout: ["admin", "manager", "cashier"],
-  discount: ["admin", "manager", "cashier"],
+  checkout: ["admin", "manager", "cashier", "waiter"],
+  discount: ["admin", "manager", "cashier", "waiter"],
   kitchen: ["admin", "manager", "kitchen"],
   menu: ["admin", "manager"],
   inbox: ["admin", "manager", "cashier", "waiter"],
