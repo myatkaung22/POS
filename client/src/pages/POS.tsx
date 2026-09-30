@@ -644,7 +644,7 @@ export function PosPage() {
             </div>
             {order && <StatusPill status={order.status} guest={pendingGuest.length > 0} items={order.items} />}
           </div>
-          {order?.tableId && !locked && (
+          {order?.tableId && !locked && can("changeTable") && (
             <select
               value=""
               disabled={busy(`move:${order.id}`) || !freeTables.length}
@@ -821,7 +821,7 @@ export function PosPage() {
             </div>
             {order && <StatusPill status={order.status} guest={pendingGuest.length > 0} items={order.items} />}
           </div>
-          {order?.tableId && !locked && (
+          {order?.tableId && !locked && can("changeTable") && (
             <select
               value=""
               disabled={busy(`move:${order.id}`) || !freeTables.length}

@@ -5,6 +5,7 @@ export const PERMISSIONS = {
   pos: ["admin", "manager", "cashier", "waiter"],
   checkout: ["admin", "manager", "cashier", "waiter"],
   discount: ["admin", "manager", "cashier", "waiter"],
+  changeTable: ["admin", "manager", "cashier", "waiter"],
   kitchen: ["admin", "manager", "kitchen"],
   menu: ["admin", "manager"],
   inbox: ["admin", "manager", "cashier", "waiter"],

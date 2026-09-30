@@ -742,7 +742,7 @@ export function registerRoutes(app: Express) {
     res.json(order);
   }));
 
-  app.post("/api/orders/:id/change-table", authRequired, requirePermission("pos"), asyncHandler(async (req, res) => {
+  app.post("/api/orders/:id/change-table", authRequired, requirePermission("changeTable"), asyncHandler(async (req, res) => {
     const destId = String((req.body as { tableId?: string })?.tableId || "").trim();
     if (!destId) {
       res.status(400).json({ error: "Choose a table" });
